@@ -48,7 +48,7 @@ class Environment(metaclass=EnvironmentMultiton):
             self.agent_list[type(agent).__name__] = {agent.my_name[0] : {agent.my_name}}
             self._agents[agent.my_name] = agent
         
-        self.print(f'> Connecting agent {type(agent).__name__}:{agent.my_name} to channel')
+        self.print(f'Connecting agent {type(agent).__name__}:{agent.my_name}')
     
     def _add_role(self, role_name: str):
         if type(role_name) == str:

@@ -49,12 +49,12 @@ class Robot(Agent):
                     target = pos
                     
         if target is None:
-            print(f"{self.my_name}> All dirt is cleaned")
+            self.print(f"All dirt is cleaned")
             #self.rm_belief(Belief("room_is_dirty"))
             #self.add_belief(Belief("room_is_clean"))
             print("*** Finished Cleaning ***")
         else:
-            print(f"{self.my_name}> Moving to {target}")
+            self.print(f"Moving to {target}")
             self.add("o","move",(target,))
     
     @Agent.plan("clean")                            
@@ -76,15 +76,15 @@ class Robot(Agent):
             direction = (0,int(diff/abs(diff)))
         
         match direction:
-            case (0,1): print(f"{self.my_name}> Moving Down")
-            case (0,-1): print(f"{self.my_name}> Moving Up")
-            case (-1,0): print(f"{self.my_name}> Moving Left")
-            case (1,0): print(f"{self.my_name}> Moving Right")
+            case (0,1): self.print(f"Moving Down")
+            case (0,-1): self.print(f"Moving Up")
+            case (-1,0): self.print(f"Moving Left")
+            case (1,0): self.print(f"Moving Right")
         
         self.position = (x+direction[0],y+direction[1])
         self.print(f"New position: {self.position}")
         
-        print(f"{self.position} {target}")
+        #print(f"{self.position} {target}")
         if self.position == target:
             self.print(f"Reached dirt position")
             self.add(Objective("clean"))

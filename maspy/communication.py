@@ -47,7 +47,7 @@ class Channel(metaclass=CommsMultiton):
             self.agent_list[type(agent).__name__] = {agent.my_name[0] : {agent.my_name}}
             self._agents[agent.my_name] = agent
         
-        self.print(f'Connecting agent {type(agent).__name__}:{agent.my_name} to channel')
+        self.print(f'Connecting agent {type(agent).__name__}:{agent.my_name}')
 
             
     def _rm_agents(self, agents):
@@ -63,7 +63,7 @@ class Channel(metaclass=CommsMultiton):
             del self._agents[agent.my_name]
             del self.agent_list[agent.my_name]
         self.print(
-            f"Desconnecting agent {type(agent).__name__}:{agent.my_name} from channel"
+            f"Desconnecting agent {type(agent).__name__}:{agent.my_name}"
         )
 
     def _send(self, sender, target, act, msg):            

@@ -87,6 +87,9 @@ class Belief:
         args_hashable = tuple(args_hashable)
 
         return hash((self.key, args_hashable, self.source))
+    
+    def __str__(self) -> str:
+        return f"Belief{self.key,self.args,self.source}"
 
 @dataclass
 class Objective:
@@ -160,11 +163,17 @@ class Objective:
 
         return hash((self.key, args_hashable, self.source))
     
+    def __str__(self) -> str:
+        return f"Objective{self.key,self.args,self.source}"
+    
 @dataclass
 class Plan:
     trigger: str
     context: list = field(default_factory=list)
     body: Callable = None
+    
+    def __str__(self) -> str:
+        return f"Plan{self.trigger,self.context,self.body.__name__}"
         
 @dataclass
 class Ask:
@@ -187,12 +196,14 @@ class Agent:
         name: str,
         beliefs: Optional[Iterable[Belief] | Belief] = None,
         objectives: Optional[Iterable[Objective] | Objective] = None,
-        full_log = False
+        full_log = False,
+        log_type = "Default"
     ):              
         self.stop_flag = None
         self.thread = None
         self.saved_msgs = []
         self.full_log = full_log
+        self.log_type = log_type
         
         self.my_name = name
         Handler().add_agents(self)
@@ -214,8 +225,11 @@ class Agent:
         except AttributeError:
             self._plans = []
          
-        self.print(f"Initialized") 
+        #self.print(f"Initialized") 
 
+    def start(self):
+        self.reasoning()
+    
     def print(self,*args, **kwargs):
         return print(f"{self._name}>",*args,**kwargs)
     
@@ -369,8 +383,9 @@ class Agent:
         type_base: Dict,
         data_type: Iterable[Belief | Objective] | Belief | Objective
     ):
-        data_type = self._clean(data_type)
         self.print(f"Adding {data_type}") if self.full_log else ...
+        data_type = self._clean(data_type)
+        
         for key, value in data_type.items():
             if key in type_base and isinstance(value, dict):
                 for inner_key, inner_value in value.items():
@@ -414,7 +429,10 @@ class Agent:
                     else:
                         type_base[data_type.source][data_type.key].remove(data_type)
         except KeyError:
-            self.print(f"{data_type} doesn't exist | purge({purge_source})")
+            if not purge_source:
+                self.print(f"{data_type} doesn't exist | purge({purge_source})")
+            else:
+                ...
       
     def search(
         self, data_type: Belief | Objective | Plan | str, 
@@ -612,11 +630,12 @@ class Agent:
                 return Belief(*data)
             case "achieve" | "unachieve":
                 return Objective(*data)
+            case _:
+                return self.print("Unknown Act")
     
     def send(self, target: str | tuple, act: str, msg: MSG | Tuple | str, channel: str = None):            
         if type(msg) not in _data_types:
             msg = self.as_data_type(act,msg)
-  
         if channel is None:
             channel = self.__default_channel
         if type(msg) is not Plan:
@@ -655,7 +674,7 @@ class Agent:
         pass
 
     def reasoning(self):
-        self.print(f"Starting Reasoning")
+        #self.print(f"Starting Reasoning")
         self.stop_flag = threading.Event()
         self.thread = threading.Thread(target=self.cycle,args=(self.stop_flag,))
         self.thread.start()

@@ -50,7 +50,7 @@ class Handler(metaclass=HandlerMeta):
         self._agent_list[agent.my_name] = type(agent).__name__
         self._agents[agent.my_name] = agent
         self.print(
-            f"Adding Agent {type(agent).__name__}:{agent.my_name} to List"
+            f"Registering Agent {type(agent).__name__}:{agent.my_name}"
         )
 
     def rm_agents(
