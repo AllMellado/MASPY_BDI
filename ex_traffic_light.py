@@ -1,7 +1,4 @@
-from maspy.environment import Environment
-from maspy.communication import Channel
-from maspy.admin import Admin
-from maspy.agent import *
+from maspy import *
 
 class Crossing(Environment):
     def __init__(self, env_name):

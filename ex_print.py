@@ -1,3 +1,4 @@
+from typing import TypeVar
 from maspy.agent import *
 from maspy.environment import Environment, Percept
 from maspy.utils import utils as dt
@@ -17,6 +18,8 @@ class simple_env(Environment):
         
     def env_action(self, src):
         self.print(f"Action by {src.my_name}")
+
+broadcast = TypeVar('broadcast')
 
 if __name__=="__main__":
     ag1 = dummy_agent("Ag1")

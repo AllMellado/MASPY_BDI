@@ -46,10 +46,6 @@ class Environment(metaclass=EnvironmentMultiton):
         return print(f"{self._name}>",*args,**kwargs)
     
     def perception(self):
-        #percept_list = []
-        #for group_keys in self._percepts.values():
-        #    for percept_set in group_keys.values():
-        #        percept_list += list(percept_set)
         return self._percepts
 
     @property
@@ -65,7 +61,6 @@ class Environment(metaclass=EnvironmentMultiton):
         try:
             for agent in agents:
                 self._add_agent(agent)
-            #self.send_agents_list()
         except TypeError:
             self._add_agent(agents)
     

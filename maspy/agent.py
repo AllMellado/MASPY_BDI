@@ -8,27 +8,14 @@ from maspy.error import (
     RunPlanError,
 )
 from maspy.utils import utils
-from typing import List, Optional, Union, Dict, Set, Tuple, Any
+from typing import TypeVar, List, Optional, Dict, Set, Tuple, Any
 from collections.abc import Iterable, Callable
 from time import sleep
 import importlib as implib
-import inspect
 
-def tell(*args, **kwargs): pass
-def untell(*args, **kwargs): pass
-def tellHow(*args, **kwargs): pass
-def untellHow(*args, **kwargs): pass
-def achieve(*args, **kwargs): pass
-def unachieve(*args, **kwargs): pass
-def askOne(*args, **kwargs): pass
-def askAll(*args, **kwargs): pass
-def askHow(*args, **kwargs): pass
-ACT_LIST = {tell, untell, tellHow, untellHow, 
-                         achieve, unachieve, 
-                         askOne, askAll, askHow}
-def gain(*args, **kwargs): pass
-def lose(*args, **kwargs): pass
-def test(*args, **kwargs): pass
+gain = TypeVar('gain')
+lose = TypeVar('lose')
+test = TypeVar('test')
 
 DEFAULT_SOURCE = "self"
 
@@ -187,7 +174,7 @@ class Event:
     intention: str = None # still don't understand how it works
     
     def __init__(self,change,data,intention=None):
-        if callable(change): self.change = change.__name__ 
+        if type(change)==TypeVar: self.change = change.__name__ 
         else: self.change = change
         self.data = data
         self.intention = intention
@@ -446,7 +433,7 @@ class Agent:
                 for plan_event in type_base:
                     chng, belf_goal = self._to_belief_goal(plan_event)
                     
-                    if ck_chng and chng != change:
+                    if change and ck_chng and chng != change:
                         continue
                     if self._compare_data(belf_goal,data,ck_type,ck_args,ck_src):
                         found_data.append(plan_event)
@@ -512,74 +499,56 @@ class Agent:
         self.print(f"Stoping {plan})")  if self.full_log else ...
         pass
     
-    def send(self, target: str | tuple, act, msg: MSG | Tuple | str, channel: str = Channel()._my_name):  
-        try: 
-            act = act.__name__ 
-        except AttributeError:
-            ...       
+    def send(self, target: str | tuple | List, act: TypeVar, msg: MSG | str, channel: str = Channel()._my_name):  
         try:
             self._channels[channel]._send(self.my_name,target,act,msg)
         except KeyError:
             self.print(f"Not Connected to Selected Channel:{channel}")
     
-    def save_msg(self, sender, act, msg):
+    def save_msg(self, act, msg):
         if self.instant_mail: 
-            self.recieve_msg(sender,act,msg)
+            self.recieve_msg(act,msg)
         else:
-            self.saved_msgs.append((sender,act,msg))
+            self.saved_msgs.append((act,msg))
 
     def _mail(self, selection_function="ALL"):
         if selection_function not in {None,"ALL"}:
             selection_function(self.saved_msgs)
         else:
             while self.saved_msgs:
-                sender,act,msg = self.saved_msgs.pop()
-                self.recieve_msg(sender,act,msg)
+                act,msg = self.saved_msgs.pop()
+                self.recieve_msg(act,msg)
                 if selection_function != "ALL":
                     break
 
-    def recieve_msg(self, sender, act, msg: MSG):
-        if not act == "env_tell":
-            self.print(f"Received from {sender} : {act} -> {msg}")  if self.full_log else ...
-        match (act, msg):
-            case ("tell", belief) if isinstance(belief, Belief):
-                self.add(belief)
+    def recieve_msg(self, act, msg: MSG):
+        #self.print(f"Received from {sender} : {act} -> {msg}")  if self.full_log else ...
+        match act:
+            case "tell" | "achieve":
+                self.add(msg)
 
-            case ("env_tell", belief) if isinstance(belief, Belief):
-                self.add(belief)
+            case "untell" | "unachieve":
+                self.rm(msg)
 
-            case ("untell", belief) if isinstance(belief, Belief):
-                self.rm(belief)
+            case "askOne":
+                found_data = self.get(msg.data_type,ck_src=False)
+                self.send(msg.source, TypeVar('tell'), found_data)
 
-            case ("achieve", goal) if isinstance(goal, Goal):
-                self.add(goal)
+            case "askAll":
+                found_data = self.get(msg.data_type,all=True,ck_src=False)
+                for data in found_data:
+                    self.send(msg.source, TypeVar('tell'), data)
 
-            case ("unachieve", goal) if isinstance(goal, Goal):
-                self.rm(goal)
+            case "tellHow":
+                self.add_plan(msg)
 
-            case ("askOne", ask) if isinstance(ask, Ask):
-                key = ask.data_type.key
-                args_len = ask.data_type.args_len
-                found_belief = self.get(Belief,key,args_len)
-                self.send(ask.source, "tell", found_belief)
+            case "untellHow":
+                self.rm_plan(msg)
 
-            case ("askAll", ask) if isinstance(ask, Ask):
-                key = ask.data_type.key
-                args_len = ask.data_type.args_len
-                found_beliefs = self.get(Belief,key,args_len,all=True)
-                for bel in found_beliefs:
-                    self.send(ask.source, "tell", bel)
-
-            case ("tellHow", plan) if isinstance(plan, Plan):
-                self.add_plan(plan)
-
-            case ("untellHow", plan) if isinstance(plan, Plan):
-                self.rm_plan(plan)
-
-            case ("askHow", ask) if isinstance(ask, Ask):
-                found_plans = self.get(Plan,ask.data_type,all=True)
+            case "askHow":
+                found_plans = self.get(Plan,msg.data_type,all=True)
                 for plan in found_plans:
-                    self.send(ask.source, "tellHow", plan)
+                    self.send(msg.source, TypeVar('tellHow'), plan)
             case _:
                 TypeError(f"Unknown type of message {act}:{msg}")
     

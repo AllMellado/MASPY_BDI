@@ -1,6 +1,4 @@
-from maspy.agent import *
-from maspy.communication import Channel
-from maspy.admin import Admin
+from maspy import *
 
 class Sample(Agent):
     def __init__(self, agent_name, log=True):
@@ -14,15 +12,14 @@ class Sample(Agent):
     @pl(gain,Goal("send_info",("Msg",)),Belief("sender"))
     def send_info(self, src, msg):
         agents_list = self.find_in("Sample","Channel")["Receiver"]
-        #self.print(self.get("b","Sender",(2,)))
         for agent in agents_list:
             self.print(f"Sending> {msg} to {agent}")
             self.send(agent,achieve,Goal("receive_info",(msg,)))
             
         agents_list = self.find_in("test","Channel")["Test"]
         for agent in agents_list:
-            pl = self.get(Plan,Belief("print"),ck_chng=False)
-            self.send(agent,tellHow,pl[0])
+            plan = self.get(Plan,Belief("print"))
+            self.send(agent,tellHow,plan)
             self.send(agent,tell,Belief("print"))
             
         self.stop_cycle()
