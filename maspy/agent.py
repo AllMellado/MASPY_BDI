@@ -12,6 +12,7 @@ from typing import TypeVar, List, Optional, Dict, Set, Tuple, Any
 from collections.abc import Iterable, Callable
 from time import sleep
 import importlib as implib
+import inspect
 
 gain = TypeVar('gain')
 lose = TypeVar('lose')
