@@ -597,7 +597,7 @@ class Agent:
         except KeyError as ke:
             self.print(f"Not connected to {cls_type}:{cls_name}:{ke}")
             
-    def execute_in(self,env_name):
+    def execute_in(self,env_name) -> Environment:
         try:
             return self._environments[env_name]
         except KeyError:
