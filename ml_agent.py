@@ -1,5 +1,5 @@
 from maspy.agent import Agent
-from maspy.machine_learning import learning
+from maspy.learning import learning
 import gymnasium as gym
 
 class mvmt_agent(Agent):

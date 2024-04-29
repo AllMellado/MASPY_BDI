@@ -1,24 +1,24 @@
 from collections.abc import Iterable
 from typing import Optional
 from maspy.environment import Environment 
-from maspy.agent import Agent, Belief, Objective, Plan
-from maspy.handler import Handler
+from maspy.agent import Agent, Belief, Goal, Plan
+from maspy.admin import Admin
 
 class Room(Environment):
     def __init__(self, env_name='room'):
         super().__init__(env_name)
         self.full_log = False
-        self.create_fact("dirt",{(0,1): False, (2,2): False})
+        self.create_percept("dirt",{(0,1): False, (2,2): False})
 
     def add_dirt(self, position):
         self.print(f"Dirt created in position {position}")
-        dirt_status = self.get_fact_value("dirt")
+        dirt_status = self.get_percept_value("dirt")
         dirt_status.update({position: False}) 
         #self._update_fact("dirt",dirt_status) # same as below
     
     def clean_position(self, agent, position):
         self.print(f"{agent} is cleaning position {position}")
-        dirt_status = self.get_fact_value("dirt")
+        dirt_status = self.get_percept_value("dirt")
         if dirt_status[position] is False:
             dirt_status[position] = True # changes the dict inside fact
         #self._update_fact("dirt",dirt_status) # useless cause of above
@@ -38,7 +38,7 @@ class Robot(Agent):
         min_dist = float("inf")
         target = None
 
-        dirt_pos = self.search("b","dirt",1,"Room")
+        dirt_pos = self.get("b","dirt",1,"Room")
         print(f"{type(dirt_pos.args)}:{dirt_pos.args}")
         x, y = self.position
         for pos, clean in dirt_pos.args.items():
@@ -61,7 +61,7 @@ class Robot(Agent):
     def clean(self,src):
         if self.has_belief(Belief("room_is_dirty")):
             self.execute_in("Room").clean_position(self.my_name, self.position)
-            self.add(Objective("decide_move"))
+            self.add(Goal("decide_move"))
     
     @Agent.plan("move")
     def move(self,src,target):
@@ -87,7 +87,7 @@ class Robot(Agent):
         #print(f"{self.position} {target}")
         if self.position == target:
             self.print(f"Reached dirt position")
-            self.add(Objective("clean"))
+            self.add(Goal("clean"))
             return
         else:
             self.add("o","move",(target,))
@@ -97,7 +97,7 @@ def main():
     rbt = Robot('R1', initial_env=env, full_log=False)
     rbt.reasoning()
     env.add_dirt((3,1))
-    rbt.add(Objective("decide_move"))
+    rbt.add(Goal("decide_move"))
 
 if __name__ == "__main__":
     main()
