@@ -33,7 +33,7 @@ snippet shows how to create an `DummyAgent`.
 #### Dummy Agent
 
 ```python
-from maspy.agent import Agent
+from maspy.agent import *
 
 class DummyAgent(Agent):
     def __init__(self, agent_name):
@@ -47,7 +47,7 @@ if __name__ == "__main__":
 The agent can also start with some inital *Beliefs* or *Objectives*.
 
 ```python
-from maspy.agent import Agent, Belief, Objective
+from maspy.agent import *
 
 class AgentWithInitalStates(Agent):
     # the caller will provide beliefs and objectives
@@ -68,21 +68,22 @@ decoration. This decoration must contain the *plan* name, and optionally
 a context needed to be true to execute the plan.
 
 ```python
-from maspy.agent import Agent
+from maspy.agent import *
 
 class AgentWithPlans(Agent):
     def __init__(self, name):
         super().__init__(name)
     
-    @Agent.plan("plan_name")
-    # always execute this plan whenever Objective("plan_name") exists
+    @pl(gain,Goal("plan_name"))
+    # always execute this plan whenever Goal("plan_name") is aquired
     # every plan needs at least 2 arguments, self and src.
     def some_plan(self, src):
         # do something you would in a ordinary python function
         ...
 
-    @Agent.plan("plan_name2", (Belief("foo")))
-    # only execute this plan if the agent has Belief("foo")
+    @pl(lose,Belief("plan_name2"), Belief("foo"))
+    # In this plan, it is executed when Belief("plan_name2") is lost
+    # it also only executes if the agent has Belief("foo")
     def some_plan(self, src):
         # do something you would in a ordinary python function
         ...
@@ -90,8 +91,7 @@ class AgentWithPlans(Agent):
 
 ### Running the agents
 Running the system is simple, given the utilities support we have in place.
-The `Handler` module contains a few usefull methods to start and manage the 
-system.
+The `Admin` module contains methods to start, stop and manage the system.
 
 #### Starting all agents
 In case you only need to start all agents, the following snippet is enough.
@@ -99,7 +99,7 @@ In case you only need to start all agents, the following snippet is enough.
 ag1 = DummyAgent("foo")
 ag2 = DummyAgent("bar")
 
-Handler().start_all_agents()
+Admin().start_all_agents()
 ```
 
 #### Starting some agents
@@ -109,9 +109,9 @@ This snippet shows how to start agents in a arbitrary order.
 ag1 = DummyAgent()
 ag2 = DummyAgent()
 
-Handler().start_agent(ag2)
+Admin().start_agent(ag2)
 # do other things
-Handler().start_agent(ag1)
+Admin().start_agent(ag1)
 ```
 ### Comunication between Agents
 After starting the agents they may be connected to a channel.
@@ -122,15 +122,15 @@ ag2 = DummyAgent("ag2")
 ag3 = DummyAgent("ag3")
 
 # connect ag1 and ag2 to channel "c"
-Handler().connect_to([ag1, ag2], [Channel("c")])
+Admin().connect_to([ag1, ag2], [Channel("c")])
 # connect ag3 to channel "c"
 
-Handler().start_all_agents()
+Admin().start_all_agents()
 # ag1 is send a belief to ag3 by the default channel
-ag1.send(ag3.my_name, "tell", Belief("foo"))
+ag1.send(ag3.my_name, tell, Belief("foo"))
 
 #ag2 is sending an Objective to ag1 using a specific channel called "c"
-ag2.send(ag1.my_name, "achieve", Objective("bar"), Channel("c"))
+ag2.send(ag1.my_name, achieve, Objective("bar"), Channel("c"))
 ```
 ### Environment
 `MASPY` also gives an abstraction to model the environment
@@ -155,7 +155,7 @@ env = MyEnv()
 # connect the agent to the environment
 ag.connect_to(env)
 
-Handler().start_all_agents()
+Admin().start_all_agents()
 # execute environment action
 ag.execute_in("my_env").env_action(ag)
 ```
