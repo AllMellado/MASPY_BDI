@@ -33,7 +33,7 @@ snippet shows how to create an `DummyAgent`.
 #### Dummy Agent
 
 ```python
-from maspy.agent import *
+from maspy import *
 
 class DummyAgent(Agent):
     def __init__(self, agent_name):
@@ -47,7 +47,7 @@ if __name__ == "__main__":
 The agent can also start with some inital *Beliefs* or *Objectives*.
 
 ```python
-from maspy.agent import *
+from maspy import *
 
 class AgentWithInitalStates(Agent):
     # the caller will provide beliefs and objectives
@@ -68,7 +68,7 @@ decoration. This decoration must contain the *plan* name, and optionally
 a context needed to be true to execute the plan.
 
 ```python
-from maspy.agent import *
+from maspy import *
 
 class AgentWithPlans(Agent):
     def __init__(self, name):
@@ -138,7 +138,7 @@ ag2.send(ag1.my_name, achieve, Objective("bar"), Channel("c"))
 #### Creating an environment
 
 ```python 
-from maspy.environment import Environment
+from maspy import *
 
 class MyEnv(Environment):
     def __init__(self, env_name="my_env"):
