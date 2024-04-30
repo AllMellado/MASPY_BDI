@@ -25,4 +25,4 @@ if __name__ == "__main__":
 
     agent_2 = DummyAgent("Dummy_2", [Belief("my_pos",(3,3)),Belief("target_pos",(3,3))], Goal("move_boxes"))
 
-    Admin().start_all_agents()
+    Admin().start_system()
