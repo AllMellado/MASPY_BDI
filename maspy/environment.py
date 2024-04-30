@@ -79,20 +79,9 @@ class Environment(metaclass=EnvironmentMultiton):
         self.print(f'Connecting agent {type(agent).__name__}:{agent.my_name}')
     
     def create_percept(self, 
-            key: str = None, 
-            args: Optional[Any] = tuple(), 
-            group: Optional[str] = DEFAULT_GROUP,
-            percept: Optional[Iterable[Percept] | Percept] = None
+            percept: Iterable[Percept] | Percept
         ):
-        if key is None and percept is None:
-            raise Exception
-        
-        if key and not percept: 
-            if type(args) is not tuple: args = (args,) 
-            percept_dict = self._clean(Percept(key, args, group))
-        
-        if percept: 
-            percept_dict = self._clean(percept)
+        percept_dict = self._clean(percept)
             
         self._percepts = utils.merge_dicts(self._percepts,percept_dict)
         self.print(f"Creating percept {percept_dict}") if self.full_log else ...

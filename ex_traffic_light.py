@@ -3,16 +3,19 @@ from maspy import *
 class Crossing(Environment):
     def __init__(self, env_name):
         super().__init__(env_name)
-        self.create_percept("traffic_light","Green")
+        self.create_percept(Percept("traffic_light",("green",)))
     
     def cross(self, src):
         self.print(f"Agent {src.my_name} is now crossing")
 
 class Cross_Manager(Agent):
-    def __init__(self, mg_name): super().__init__(mg_name,full_log=False)
+    def __init__(self, mg_name): 
+        super().__init__(mg_name,full_log=True)
+        self.add(Belief("MyID",("123A",)))
         
-    @pl(gain,Belief("traffic_light",("Color",)))
-    def traffic_light(self,src,color):
+    @pl(gain,Belief("traffic_light",("Color",)),Belief("MyID",('ID',)))
+    def traffic_light(self,src,color,id):
+        self.print(f"Car id: {id}")
         vehicles = self.find_in("Vehicle","Env","Cross_Junction")
         for vehicle in vehicles["Vehicle"]:
             self.print(f"Detected traffic light: {color} in env {src} - sending signal to {vehicle}")
@@ -23,7 +26,8 @@ class Cross_Manager(Agent):
         self.stop_cycle()
 
 class Vehicle(Agent):
-    def __init__(self, vh_name): super().__init__(vh_name,full_log=False)
+    def __init__(self, vh_name): 
+        super().__init__(vh_name,full_log=True)
     
     @pl(gain,Goal("crossing_over"))
     def crossing(self,src):

@@ -135,14 +135,12 @@ class Admin(metaclass=AdminMeta):
     
     def connect_to(self, agents: Iterable, targets: Iterable[Environment | Channel]):
         for agent in agents:
-            if type(agent) not in (tuple,list):
-                agent =  [agent,"any"]
             for target in targets:
                 match target:
                     case Environment():
-                        agent[0]._environments[target._my_name] = target
+                        agent._environments[target._my_name] = target
                     case Channel():
-                        agent[0]._channels[target._my_name] = target
-                           
-                target._add_agent(agent[0])
+                        agent._channels[target._my_name] = target
+                
+                target._add_agent(agent)
 

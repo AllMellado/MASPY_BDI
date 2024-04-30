@@ -251,16 +251,17 @@ class Agent:
         Admin().add_agents(self)
         self._name = f"Agent:{self.my_name}"
         
-        self._environments: Dict[str, Environment] = {}
-        self._channels: Dict[str, Channel] = {}
+        self._environments: Dict[str, Environment] = dict()
+        self._channels: Dict[str, Channel] = dict()
 
-        self.__beliefs = self._clean(beliefs)
-        self.__old_beliefs = self._clean(beliefs)
-        self.__goals = self._clean(goals)
         self.__events: List[Event] = []
+        self.__beliefs: Dict[str, Dict[str, Set[Belief]]] = dict()
+        self.__goals: Dict[str, Dict[str, Set[Goal]]] = dict()
+        if beliefs: self.add(beliefs)
+        if goals: self.add(goals)
         
         self.instant_mail = instant_mail
-        self.connect_to(Channel())
+        self.connect_to(Channel(),"")
         self.paused_agent = False
         
         try: 
@@ -276,20 +277,23 @@ class Agent:
     def print(self,*args, **kwargs):
         return print(f"{self._name}>",*args,**kwargs)
     
-    @staticmethod
-    def plan_old(trigger, context=[]):
-        class decorator:
-            def __init__(self,func):
-                self.func = func
-            
-            def __set_name__(self, instance, name):
-                print("depreciated")
-        return decorator
-    
-    def set_default_channel(self, channel):
-        self.__default_channel = channel
+    @property
+    def print_beliefs(self):
+        print("Beliefs:",self.__beliefs)
 
-    def connect_to(self, target: Channel | Environment | str, target_name: str = "default"):
+    @property
+    def print_goals(self):
+        print("Goals:",self.__goals)
+    
+    @property
+    def print_plans(self):
+        print("Plans:",self._plans)
+    
+    @property
+    def print_events(self):
+        print("Events:",self.__events)
+    
+    def connect_to(self, target: Channel | Environment | str, target_name: str):
         match target:
             case Environment():
                 self._environments[target._my_name] = target
@@ -318,30 +322,13 @@ class Agent:
         target.add_agents(self)
         return target
 
-    def add_focus_env(self, env_instance: Environment):
-        self._environments[env_instance._my_name] = env_instance
-
-    def add_focus(self, environment: str, env_name: str = 'env') -> Environment:
-        classes = []
-        try:
-            env = implib.import_module(environment)
-        except ModuleNotFoundError:
-            self.print(f"No environment named '{env_name}'")
-            return
-        self._environments = {env_name: {}}
-        for name, obj in inspect.getmembers(env):
-            if inspect.isclass(obj) and name != "Environment":
-                lineno = inspect.getsourcelines(obj)[1]
-                classes.append((lineno, obj))
-        classes.sort()
-        self._environments[env_name] = classes[0][1](env_name)
-        del env
-        self.print(f"Connected to environment {env_name}")
-        return self._environments[env_name]
-
-    def rm_focus(self, environment: str):
-        del self._environments[environment]
-
+    def disconnect_from(self, target: Channel | Environment):
+        match target:
+            case Environment():
+                del self._environments[target._my_name]
+            case Channel():
+                del self._channels[target._my_name]
+                
     def get_env(self, env_name: str):
         return self._environments[env_name]
     
@@ -351,28 +338,14 @@ class Agent:
 
     def rm_plan(self, plan: Plan):
         self._plans.pop(plan)
-
-    @property
-    def print_beliefs(self):
-        print("Beliefs:",self.__beliefs)
-
-    @property
-    def print_goals(self):
-        print("Goals:",self.__goals)
-    
-    @property
-    def print_plans(self):
-        print("Plans:",self._plans)
-    
-    @property
-    def print_events(self):
-        print("Events:",self.__events)
     
     def _new_event(self,change,data,intention=None):
         try:
             for dt in data:
+                self.print(f"New Event: {change}:{dt}")  if self.full_log else ...
                 self.__events.append(Event(change,dt,intention))
         except(TypeError):
+            self.print(f"New Event: {change}:{data}")  if self.full_log else ...
             self.__events.append(Event(change,data,intention))
     
     def _get_type_base(self, data_type):
@@ -477,20 +450,24 @@ class Agent:
             #self.print("Failed at args_len")
             return False
         for arg1,arg2 in zip(data1._args,data2._args):
-            if isinstance(arg1,str) and arg1[0].isupper():
+            if isinstance(arg1,str) and (arg1[0].isupper()):
+                continue
+            elif isinstance(arg2,str) and (arg2[0].isupper()):
                 continue
             elif arg1 == arg2:
                 continue
             else:
-                #self.print("Failed at args")
+                #self.print(f"Failed at args {arg1} x {arg2}")
                 return False
         else:
+            #self.print("Data is Compatible")
             return True
                       
-    def _run_plan(self, plan: Plan, trigger: Belief | Goal):
+    def _run_plan(self, plan: Plan, trigger: Belief | Goal, args: tuple):
         self.print(f"Running {plan}")  if self.full_log else ...
         try:
-            return plan.body(self, trigger.source, *trigger._args)
+            #self.print(f'running with {trigger._args} {args}')
+            return plan.body(self, trigger.source, *trigger._args, *args)
         except KeyError:
             self.print(f"{plan} doesn't exist")
             raise RunPlanError
@@ -591,15 +568,15 @@ class Agent:
             
     def cycle(self, stop_flag):
         while not stop_flag.is_set():   
-            self._perception()       
+            self._perception()   
             self._mail()  
             event = self._select_event()
-            #self.print(f"Selected event: {event} in {self.__events}") if self.my_name[0] == "Sender" else ...
+            #self.print(f"Selected event: {event} in {self.__events}") 
             plans = self._retrieve_plans(event)
-            #self.print(f"Selected plans: {plans} in {self._plans}") if self.my_name[0] == "Sender" else ...
-            chosen_plan = self._select_plan(plans)
-            #self.print(f"Selected chosen_plan: {chosen_plan}") if self.my_name[0] == "Sender" else ...
-            result = self._execute_plan(chosen_plan,event)
+            #self.print(f"Selected plans: {plans} in {self._plans}")
+            chosen_plan, args = self._select_plan(plans,event)
+            #self.print(f"Selected chosen_plan: {chosen_plan} with {args} arguments")
+            result = self._execute_plan(chosen_plan,event,args)
             #sleep(1)
 
     def _perception(self):
@@ -655,21 +632,27 @@ class Agent:
         if event is None: return None
         return self.get(Plan,event,all=True,ck_src=False)
     
-    def _select_plan(self, plans):
-        if plans is None: return None
+    def _select_plan(self, plans, event:Event):
+        if plans is None: return None, None
+        
+        args = tuple()
         for plan in plans:
             for context in plan.context:
-                if not self.get(context,ck_src=False):
+                ctxt = self.get(context,ck_src=False)
+                if not ctxt:
                     break
+                for x in ctxt[0]._args:
+                    args += (x,)
             else:    
-                return plan
-        return None
+                return plan, args
+        self.print(f"Found no applicable plan for {event.change}:{event.data}")
+        return None, None
     
-    def _execute_plan(self, chosen_plan:Plan, event:Event):
+    def _execute_plan(self, chosen_plan:Plan, event: Event, args):
         if not chosen_plan:
             return None
         try:
-            return self._run_plan(chosen_plan, event.data)
+            return self._run_plan(chosen_plan,event.data,args)
         except RunPlanError:
             self.print(f"{chosen_plan} failed")
 
