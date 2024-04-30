@@ -645,7 +645,7 @@ class Agent:
                     args += (x,)
             else:    
                 return plan, args
-        self.print(f"Found no applicable plan for {event.change}:{event.data}")
+        self.print(f"Found no applicable plan for {event.change}:{event.data}") if self.full_log else ...
         return None, None
     
     def _execute_plan(self, chosen_plan:Plan, event: Event, args):
