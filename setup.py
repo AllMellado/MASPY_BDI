@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.0.4'
+VERSION = '0.1.1'
 DESCRIPTION = 'Multi-Agent Systems in Python with Machine Learning'
 LONG_DESCRIPTION = 'A library for the devolopment of multi-agent systems with components of machine learning'
 
