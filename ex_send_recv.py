@@ -35,6 +35,7 @@ class test(Agent):
     
 
 if __name__ == "__main__":
+    Channel().full_log = True
     t = test("Test")
     t.add(Goal("print"))
     sender = Sample("Sender")    

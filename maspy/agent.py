@@ -19,12 +19,14 @@ lose = TypeVar('lose')
 test = TypeVar('test')
 
 DEFAULT_SOURCE = "self"
+DEFAULT_CHANNEL = "default"
 
 @dataclass(eq=True, frozen=True)
 class Belief:
     key: str
     _args: tuple = field(default_factory=tuple)
     source: str = DEFAULT_SOURCE
+    adds_event: bool = True
 
     @property
     def args(self):
@@ -174,11 +176,8 @@ class Event:
     data: Belief | Goal 
     intention: str = None # still don't understand how it works
     
-    def __init__(self,change,data,intention=None):
-        if type(change)==TypeVar: self.change = change.__name__ 
-        else: self.change = change
-        self.data = data
-        self.intention = intention
+    def __post_init__(self):
+        if type(self.change)==TypeVar: self.change = self.change.__name__ 
     
     def __str__(self) -> str:
         return f"Event{self.change,self.data,self.intention}"
@@ -236,19 +235,23 @@ class Agent:
         beliefs: Optional[Iterable[Belief] | Belief] = None,
         goals: Optional[Iterable[Goal] | Goal] = None,
         full_log = False,
+        show_cycle = False,
         log_type = "Default",
         instant_mail = False
     ):              
+        self.full_log = full_log
+        self.show_cycle = show_cycle
+        self.log_type = log_type
+        
         from maspy.admin import Admin
         self.my_name = name
         Admin().add_agents(self)
         
+        self.sleep = None
         self.stop_flag = None
         self.running = False
         self.thread = None
         self.saved_msgs = []
-        self.full_log = full_log
-        self.log_type = log_type
         
         self._name = f"Agent:{self.my_name}"
         
@@ -262,7 +265,7 @@ class Agent:
         if goals: self.add(goals)
         
         self.instant_mail = instant_mail
-        self.connect_to(Channel(),"")
+        self.connect_to(Channel())
         self.paused_agent = False
         
         try: 
@@ -343,9 +346,11 @@ class Agent:
     def _new_event(self,change,data,intention=None):
         try:
             for dt in data:
+                if isinstance(dt,Belief) and not dt.adds_event: continue
                 self.print(f"New Event: {change}:{dt}")  if self.full_log else ...
                 self.__events.append(Event(change,dt,intention))
         except(TypeError):
+            if isinstance(data,Belief) and not data.adds_event: return
             self.print(f"New Event: {change}:{data}")  if self.full_log else ...
             self.__events.append(Event(change,data,intention))
     
@@ -369,14 +374,14 @@ class Agent:
         for type_data, data in cleaned_data.items():
             if len(data) == 0: continue
             type_base = self._get_type_base(type_data)
-            type_base = utils.merge_dicts(data,type_base)
+            utils.merge_dicts(data,type_base)
             
         self._new_event("gain",data_type)
                  
     def rm(self, data_type: Belief | Goal | Iterable[Belief | Goal]):
         self.print(f"Removing {data_type}") if self.full_log else ...
         
-        if type(data_type) != Iterable: data_type = [data_type]
+        if not isinstance(data_type, Iterable): data_type = [data_type]
             
         for typ in data_type:
             type_base = self._get_type_base(type(typ))
@@ -390,7 +395,7 @@ class Agent:
     def get(self, data_type: Belief | Goal | Plan | Event,
         search_with:  Belief | Goal | Plan | Event = None,
         all = False, ck_chng=True, ck_type=True, ck_args=True, ck_src=True
-    ) -> List[Belief | Goal | Plan | Event]:
+    ) -> List[Belief | Goal | Plan | Event] | Belief | Goal | Plan | Event:
         if type(data_type) is type: data_type = data_type(0,0,0)
         type_base = self._get_type_base(type(data_type))
         if search_with is None: search_with = data_type
@@ -418,7 +423,7 @@ class Agent:
                         if not all: return plan_event
 
             case _: pass
-        return found_data
+        return found_data if found_data else None
 
     def _to_belief_goal(self, data_type: Belief | Goal | Plan | Event):
         change = None
@@ -481,7 +486,8 @@ class Agent:
         self.print(f"Stoping {plan})")  if self.full_log else ...
         pass
     
-    def send(self, target: str | tuple | List, act: TypeVar, msg: MSG | str, channel: str = Channel()._my_name):  
+    def send(self, target: str | tuple | List, act: TypeVar, msg: MSG | str, channel: str = DEFAULT_CHANNEL):  
+        if type(target) == str: target = (target,1) 
         try:
             self._channels[channel]._send(self.my_name,target,act,msg)
         except KeyError:
@@ -574,16 +580,17 @@ class Agent:
             
     def cycle(self, stop_flag):
         while not stop_flag.is_set():   
+            self.print(f"#### New cycle ####") if self.show_cycle else ...
             self._perception()   
             self._mail()  
             event = self._select_event()
-            self.print(f"Selected event: {event} in {self.__events}") if self.full_log else ...
+            self.print(f"Selected event: {event} in {self.__events}") if self.show_cycle else ...
             plans = self._retrieve_plans(event)
-            self.print(f"Selected plans: {plans} in {self._plans}") if self.full_log else ...
+            self.print(f"Selected plans: {plans} in {self._plans}") if self.show_cycle else ...
             chosen_plan, args = self._select_plan(plans,event)
-            self.print(f"Selected chosen_plan: {chosen_plan} with {args} arguments") if self.full_log else ...
+            self.print(f"Selected chosen_plan: {chosen_plan} with {args} arguments") if self.show_cycle else ...
             result = self._execute_plan(chosen_plan,event,args)
-            #sleep(1)
+            if self.sleep: sleep(self.sleep)
 
     def _perception(self):
         percept_dict = dict()
@@ -599,7 +606,7 @@ class Agent:
             for key,percepts_set in keys.items():
                 belief_set = set()
                 for percept in percepts_set:
-                    belief_set.add(Belief(percept.key,percept.args,source))
+                    belief_set.add(Belief(percept.key,percept.args,source,percept.adds_event))
                 percepts[source][key] = belief_set
         return percepts
      
@@ -647,7 +654,7 @@ class Agent:
                 ctxt = self.get(context,ck_src=False)
                 if not ctxt:
                     break
-                for x in ctxt[0]._args:
+                for x in ctxt._args:
                     args += (x,)
             else:    
                 return plan, args

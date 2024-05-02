@@ -20,14 +20,14 @@ def test_clean():
 def test_percepts_are_Percept():
     env = Environment("test_env1")
     with pytest.raises(Exception):
-        env.create_percept()
+        env.create()
         
-    env.create_percept("KEY")
-    env.create_percept("KEY",5)
-    env.create_percept("KEY",(1,2,3),"Normal")
-    env.create_percept("KEY",group="Normal")
-    env.create_percept(percept=Percept("B"))
-    env.create_percept(percept=[Percept("C",group="Normal"), Percept("D",(2,))])
+    env.create("KEY")
+    env.create("KEY",5)
+    env.create("KEY",(1,2,3),"Normal")
+    env.create("KEY",group="Normal")
+    env.create(percept=Percept("B"))
+    env.create(percept=[Percept("C",group="Normal"), Percept("D",(2,))])
     for group, keys in env._percepts.items():
             for key, percept_set in keys.items():
                 for percept in percept_set:
@@ -35,25 +35,25 @@ def test_percepts_are_Percept():
                     
 def test_delete_percepts():
     env = Environment("test_env2")
-    env.create_percept("KEY",23,"Normal")
-    env.create_percept("KEY",(42,27))
+    env.create("KEY",23,"Normal")
+    env.create("KEY",(42,27))
     assert Percept("KEY",(23,),"Normal") in env._percepts["Normal"]["KEY"]
     assert Percept("KEY",(42,27)) in env._percepts[DEFAULT_GROUP]["KEY"]
-    env.delete_percept("KEY",23,"Normal")
-    env.delete_percept("KEY",(42,27))
+    env.delete("KEY",23,"Normal")
+    env.delete("KEY",(42,27))
     assert Percept("KEY",(23,),"Normal") not in env._percepts["Normal"]["KEY"]
     assert Percept("KEY",(42,27)) not in env._percepts[DEFAULT_GROUP]["KEY"]
     
 def test_change_percept():
     env = Environment("change")
-    env.create_percept("KEY",42)
-    env.change_percept("KEY",42,27)
+    env.create("KEY",42)
+    env.change("KEY",42,27)
     assert Percept("KEY",(42,)) not in env._percepts[DEFAULT_GROUP]["KEY"]
     assert Percept("KEY",(27,)) not in env._percepts[DEFAULT_GROUP]["KEY"]
 
 def test_percept_exists():
     env = Environment("test_env3")
-    env.create_percept("KEY",23)
+    env.create("KEY",23)
     assert Percept("KEY",(23,)) in env._percepts[DEFAULT_GROUP]["KEY"] and \
         env._percept_exists("KEY",23)
     env.print_percepts

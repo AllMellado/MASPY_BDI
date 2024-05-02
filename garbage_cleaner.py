@@ -27,7 +27,7 @@ class Robot(Agent):
     def decide_move(self,src):
         min_dist = float("inf")
         target = None
-
+        
         dirt_pos = self.get(Belief("dirt","Pos","Room"))
         print(f"{dirt_pos.args}")
         x, y = self.position
@@ -86,6 +86,6 @@ class Robot(Agent):
 
 if __name__ == "__main__":
     env = Room()
-    env.create_percept(Percept("dirt",{(0,1): False, (2,2): False}))
+    env.create(Percept("dirt",{(0,1): False, (2,2): False}))
     rbt = Robot('R1', initial_env=env, full_log=False)
     Admin().start_system()

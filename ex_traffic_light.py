@@ -3,7 +3,7 @@ from maspy import *
 class Crossing(Environment):
     def __init__(self, env_name):
         super().__init__(env_name)
-        self.create_percept(Percept("traffic_light",("green",)))
+        self.create(Percept("traffic_light",("green",)))
     
     def cross(self, src):
         self.print(f"Agent {src.my_name} is now crossing")
@@ -32,7 +32,7 @@ class Vehicle(Agent):
     @pl(gain,Goal("crossing_over"))
     def crossing(self,src):
         self.print(f"Confirmation for crossing by {src}")
-        self.execute_in("Cross_Junction").cross(self)
+        self.action("Cross_Junction").cross(self)
         self.print(f"Crossing Completed")
         self.send(src,tell,Belief("leaving_junction"),"Crossing")
         self.stop_cycle()
