@@ -1,9 +1,6 @@
 from maspy import *
 
 class Sample(Agent):
-    def __init__(self, agent_name, log=False):
-        super().__init__(agent_name,full_log=log)
-    
     @pl(gain,Belief("print"))
     def Sample_plan(self, src):
         self.print("Running Another Agent's Plan")
@@ -16,7 +13,7 @@ class Sample(Agent):
             self.print(f"Sending> {msg} to {agent}")
             self.send(agent,achieve,Goal("receive_info",(msg,)))
             
-        agents_list = self.find_in("test","Channel")["Test"]
+        agents_list = self.find_in("Test","Channel")["Test"]
         for agent in agents_list:
             plan = self.get(Plan,Belief("print"))
             self.send(agent,tellHow,plan)
@@ -29,14 +26,14 @@ class Sample(Agent):
         self.print(f"Information [{msg}] - Received from {src}")
         self.stop_cycle()
 
-class test(Agent):
+class Test(Agent):
     def __init__(self, name):
         super().__init__(name)
     
 
 if __name__ == "__main__":
     Channel().full_log = True
-    t = test("Test")
+    t = Test("Test")
     t.add(Goal("print"))
     sender = Sample("Sender")    
     sender.add(Belief("sender"))

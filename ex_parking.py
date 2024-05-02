@@ -1,7 +1,6 @@
 from maspy import *
 import random as rnd
 from time import sleep
-from math import ceil
 
 class Parking(Environment):
     def __init__(self, env_name=None):
@@ -27,7 +26,7 @@ class Parking(Environment):
     
 class Manager(Agent):
     def __init__(self, agt_name=None):
-        super().__init__(agt_name,full_log=False,show_cycle=False)
+        super().__init__(agt_name)
         self.add(Belief("spotPrice",rnd.randint(12,20),adds_event=False))
         self.add(Belief("minPrice",rnd.randint(6,10),adds_event=False))
 
@@ -65,7 +64,7 @@ class Manager(Agent):
     
 class Driver(Agent):
     def __init__(self, agt_name=None):
-        super().__init__(agt_name,full_log=False,show_cycle=False)
+        super().__init__(agt_name)
         self.add(Belief("budget",(rnd.randint(6,10),rnd.randint(12,20)),adds_event=False))
         self.add(Goal("park"))
     
@@ -103,7 +102,6 @@ class Driver(Agent):
     
         
 if __name__ == "__main__":
-    #Admin().set_logging(True,False)
     park = Parking()
     park_ch = Channel("Parking")
     manager = Manager()
@@ -112,5 +110,4 @@ if __name__ == "__main__":
         driver_list.append(Driver("Drv"))
     Admin().connect_to(manager, [park,park_ch])
     Admin().connect_to(driver_list, park_ch)
-    #Admin().slow_cycle_by(2)
     Admin().start_system()

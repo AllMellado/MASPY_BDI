@@ -9,13 +9,8 @@ class Crossing(Environment):
         self.print(f"Agent {src.my_name} is now crossing")
 
 class Cross_Manager(Agent):
-    def __init__(self, mg_name): 
-        super().__init__(mg_name,full_log=False)
-        self.add(Belief("MyID",("123A",)))
-        
-    @pl(gain,Belief("traffic_light","Color"),Belief("MyID",'ID'))
-    def traffic_light(self,src,color,id):
-        self.print(f"Car id: {id}")
+    @pl(gain,Belief("traffic_light","Color"))
+    def traffic_light(self,src,color,):
         vehicles = self.find_in("Vehicle","Env","Cross_Junction")
         for vehicle in vehicles["Vehicle"]:
             self.print(f"Detected traffic light: {color} in env {src} - sending signal to {vehicle}")
@@ -27,7 +22,7 @@ class Cross_Manager(Agent):
 
 class Vehicle(Agent):
     def __init__(self, vh_name): 
-        super().__init__(vh_name,full_log=False)
+        super().__init__(vh_name)
     
     @pl(gain,Goal("crossing_over"))
     def crossing(self,src):
@@ -41,7 +36,7 @@ class Vehicle(Agent):
 if __name__ == "__main__":
     cross_channel = Channel("Crossing")
     cross_env = Crossing("Cross_Junction")
-    cross_manager = Cross_Manager("Cross_Manager")
+    cross_manager = Cross_Manager("CrossManager")
     vehicle = Vehicle("Vehicle")
     Admin().connect_to([cross_manager,vehicle],[cross_channel,cross_env])
     Admin().start_system()

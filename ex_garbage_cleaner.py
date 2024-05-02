@@ -1,7 +1,6 @@
 from maspy import *
 
 class Room(Environment):
-    
     def add_dirt(self, position):
         self.print(f"Dirt created in position {position}")
         dirt_status = self.get(Percept("dirt","Statuses"))
@@ -20,7 +19,6 @@ class Robot(Agent):
         self.add(Goal("decide_move"))
         self.add(Belief("room_is_dirty"))
         self.position = (0,0)
-        #self.print_beliefs
         self.print(f"Inicial position {self.position}")
 
     @pl(gain,Goal("decide_move"))
@@ -52,7 +50,6 @@ class Robot(Agent):
     def clean(self,src):
         if self.has(Belief("room_is_dirty")):
             self.action("Room").clean_position(self.my_name, self.position)
-            #Environment("Room").clean_position(self.my_name, self.position)
             self.add(Goal("decide_move"))
     
     @pl(gain,Goal("move",("X","Y")))
@@ -76,7 +73,6 @@ class Robot(Agent):
         self.position = (x+direction[0],y+direction[1])
         self.print(f"New position: {self.position}")
         
-        #print(f"{self.position} {target}")
         if self.position == (tgX,tgY):
             self.print(f"Reached dirt position")
             self.add(Goal("clean_dirt"))
