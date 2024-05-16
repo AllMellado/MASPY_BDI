@@ -2,6 +2,7 @@ import threading
 from dataclasses import dataclass, field
 from maspy.environment import Environment
 from maspy.communication import Channel
+from maspy.learning import Learning
 from maspy.error import (
     InvalidBeliefError,
     InvalidPlanError,
@@ -257,10 +258,14 @@ class Agent:
         self.thread = None
         self.saved_msgs = []
         
+        self._ml_models = []
+        self.policies = []
+        
         self._name = f"Agent:{self.my_name}"
         
         self._environments: Dict[str, Environment] = dict()
         self._channels: Dict[str, Channel] = dict()
+        self._learning_models: Dict[str, Learning] = dict()
 
         self.__events: List[Event] = []
         self.__beliefs: Dict[str, Dict[str, Set[Belief]]] = dict()
@@ -272,12 +277,12 @@ class Agent:
         self.connect_to(Channel())
         self.paused_agent = False
         
+        self.strategies: Dict[str, Dict] = dict()
         try: 
             self._plans
         except AttributeError:
             self._plans = []
          
-        #self.print(f"Initialized") 
 
     def start(self):
         self.reasoning()
@@ -427,6 +432,7 @@ class Agent:
                         if not all: return plan_event
 
             case _: pass
+            
         return found_data if found_data else None
 
     def _to_belief_goal(self, data_type: Belief | Goal | Plan | Event):
@@ -477,12 +483,12 @@ class Agent:
             return True
                       
     def _run_plan(self, plan: Plan, trigger: Belief | Goal, args: tuple):
-        self.print(f"Running {plan}")  if self.full_log else ...
+        self.print(f"Running {plan}")  if self.full_log or self.show_cycle else ...
         try:
             #self.print(f'running with {trigger._args} {args}')
             return plan.body(self, trigger.source, *trigger._args, *args)
-        except KeyError:
-            self.print(f"{plan} doesn't exist")
+        except KeyError as e:
+            self.print(f"{plan} doesn't exist {repr(e)}")
             raise RunPlanError
 
     # TODO: implement stoping plan
@@ -587,6 +593,7 @@ class Agent:
             self.print(f"#### New cycle ####") if self.show_cycle else ...
             self._perception()   
             self._mail()  
+            self._strategy()
             event = self._select_event()
             self.print(f"Selected event: {event} in {self.__events}") if self.show_cycle else ...
             plans = self._retrieve_plans(event)
@@ -596,6 +603,12 @@ class Agent:
             result = self._execute_plan(chosen_plan,event,args)
             if self.sleep: sleep(self.sleep)
 
+    def _strategy(self):
+        for model_name in self._learning_models:
+            self.print(f"Updating strategies '{model_name}'") if self.show_cycle else ...
+            strategy = self._learning_models[model_name].strategy()
+            self.strategies[model_name] = strategy 
+    
     def _perception(self):
         percept_dict = dict()
         for env_name in self._environments:

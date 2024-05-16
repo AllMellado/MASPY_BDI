@@ -119,15 +119,11 @@ class Robot(Agent):
         else:
             self.add(Goal("move_to",(tgX,tgY)))
 
-
-
 def main():    
     # Learning 
     lrn = Learning()
     lrn.set_params(map_size,num_targets,0,
-                   num_pop=100,
-                   num_step=map_size*num_targets/2,
-                   num_iter=500)
+                   num_pop,num_steps,num_iter)
     lrn.learn(method,show_log=True)
     
     # Environment Model
@@ -145,7 +141,7 @@ def main():
     env.print(f'Dirt in positions: {dirt_percept.keys()}')
     
     # Agent
-    rbt = Robot('R1', initial_env=env, full_log=False, print_path=False)
+    rbt = Robot('R1', initial_env=env, full_log=False, print_path=True)
     rbt.charge_pos = (randint(0,map_size-1),randint(0,map_size-1))
     done = False
     while not done:
@@ -153,11 +149,6 @@ def main():
         if rbt.position not in dirt_percept.keys(): done = True
     rbt.ml = lrn
     rbt.print(f"Inicial position {rbt.position} - Charging position {rbt.charge_pos}")
-    
-    #rbt.sleep = 1
-    #rbt.show_cycle = True
-    #lrn.env.set_state(lrn.env.encode(*rbt.position))
-    #print(lrn.env.render(lrn.adj_matrix))
     
     # Admin
     Admin().start_system()
@@ -174,7 +165,7 @@ if __name__ == "__main__":
     gamma = 0.9
     threshold = 0.001
     
-    num_pop = 100
+    num_pop = 10
     num_steps = map_size*num_targets/2
     num_iter = 500
     

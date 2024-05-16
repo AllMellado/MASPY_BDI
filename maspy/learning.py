@@ -1,11 +1,16 @@
 from typing import( Generic, Optional, Sequence, Tuple, Type, TypeVar, Union )
+from typing import Any, Dict, Optional, Set, List
+from threading import Lock
 from contextlib import closing
 from time import sleep
 from io import StringIO
 from os import system
 import numpy as np
+from numpy.typing import NDArray
 import sys
+import math
 import matplotlib.pyplot as plt
+import time
 
 ObsType = TypeVar("ObsType")
 ActType = TypeVar("ActType")
@@ -18,7 +23,7 @@ class learning_model(object):
                    [-1, 0, 0, 0],
                    [ 0,-2,-1,-1],
                    [ 0, 0, 0,-2]]
-            
+        self.map = map
         self.desc = np.asarray(map, dtype=int)
         self.ori_desc = np.asarray(map, dtype=int).copy()
         
@@ -37,7 +42,9 @@ class learning_model(object):
             state: {action: [] for action in range(self.num_actions)}
             for state in range(self.num_states)
         }
-        
+        self.populate_states()
+
+    def populate_states(self):
         arrive_reward = 10
         for row in range(self.num_rows):
             for col in range(self.num_cols):
@@ -47,6 +54,7 @@ class learning_model(object):
                 for action in range(self.num_actions):
                     new_row, new_col, = row, col
                     reward = 0 # Recompensa para movimentar normalmente
+                    terminated = False
                     if action == 0 and row < self.max_row and self.desc[row+1, col] != -1 : #  Movimenta p/ Baixo
                         new_row = min(row+1,self.max_row)
                         if self.desc[new_row,col] == -2:    # Recompensa quando alcança posicao alvo
@@ -65,8 +73,10 @@ class learning_model(object):
                             reward = arrive_reward
                     
                     new_state = self.encode(new_row,new_col) # Novo estado apos acao
-                    self.P[state][action].append( (1.0, new_state, reward) )
-
+                    self.P[state][action].append( 
+                            (1.0, new_state, reward, terminated) 
+                        )
+                    
         self.initial_state_distrib /= self.initial_state_distrib.sum()
         self.action_space = Discrete(self.num_actions)
         self.observation_space = Discrete(self.num_states)
@@ -102,22 +112,21 @@ class learning_model(object):
         transitions = self.P[self.s][a]
         if len(transitions) > 1:
             i = self.categorical_sample([t[0] for t in transitions])
-            p, s, r = transitions[i]
+            p, s, r, t = transitions[i]
         else:
-            p, s, r = transitions[0]
+            p, s, r, t = transitions[0]
 
-        return (int(s), r, {"prob": p, "action_mask": self.action_mask(s)})
+        return (int(s), r, t, {"prob": p, "action_mask": self.action_mask(s)})
 
     # Realiza uma Acao no Estado Atual
-    
     def step(self, a: ActType) -> Tuple[ObsType, float, bool, dict]:
         transitions = self.P[self.s][a]
     
         if len(transitions) > 1:
             i = self.categorical_sample([t[0] for t in transitions])
-            p, s, r = transitions[i]
+            p, s, r, t = transitions[i]
         else:
-            p, s, r = transitions[0]
+            p, s, r, t = transitions[0]
 
         row,col = self.decode(s)
         if self.desc[row][col] == -2:
@@ -127,7 +136,7 @@ class learning_model(object):
             
         self.s = s
         self.last_action = a
-        return (int(s), r, {"prob": p, "action_mask": self.action_mask(s)})
+        return (int(s), r, t, {"prob": p, "action_mask": self.action_mask(s)})
 
     # Transforma o caminho de Estados em sequencia de Acoes
     def states_to_actions(self, path):
@@ -157,7 +166,7 @@ class learning_model(object):
         states = []
         for action,value in enumerate(actions):
             if value == 1:
-                s, _, _, = self.look(action)
+                s,_,_,_ = self.look(action)
                 states.append(s)
         return states
     
@@ -267,7 +276,6 @@ class Discrete(Space[int]):
     def sample(self) -> int:
         return int(self.start + np.random.randint(self.n))
 
-
     # value_function
     # rewards
     # policy
@@ -279,24 +287,103 @@ class Discrete(Space[int]):
 
     # max_targets
 
-class learning:
-    def __init__(self, map_size=10, num_targets=10, wall_perc=0.1,
-                epsilon=0.1, num_pop=5, num_step=50, num_iter=100
-                ) -> None:     
-        self.model = learning_model 
-        self.map_size = map_size
-        self.num_targets = num_targets
-        self.wall_perc = wall_perc
-        self.epsilon = epsilon
-        self.num_pop = num_pop
-        self.num_step = num_step
-        self.num_iter = num_iter
+class Box(Space[NDArray[Any]]):
+    def __init__(self) -> None:
+        pass
+
+class LearningMultiton(type):
+    _instances: Dict[str, "Learning"] = {}
+    _lock: Lock = Lock()
+
+    def __call__(cls, lrn_name=None, full_log=None):
+        with cls._lock:
+            _my_name = lrn_name if lrn_name else str(cls.__name__)
+            if _my_name not in cls._instances:
+                vars = []
+                if lrn_name: vars.append(lrn_name)
+                if lrn_name: vars.append(full_log)
+                instance = super().__call__(*vars)
+                cls._instances[_my_name] = instance
+        return cls._instances[_my_name]
+
+class Learning(metaclass=LearningMultiton):
+    def __init__(self, lrn_name=None,full_log=None) -> None:
         
+        self._my_name = lrn_name
+        self.full_log = full_log
+        self.model = learning_model 
+        #self.map_size = map_size
+        #self.num_targets = num_targets
+        #self.wall_perc = wall_perc
+        #self.epsilon = epsilon
+        #self.num_pop = num_pop
+        #self.num_step = num_step
+        #self.num_iter = num_iter
+        
+        self.agent_list = dict()
+        self._agents = dict()
+        
+        self._name = f"Learning:{self._my_name}"
         self.make_graph = False
         self.adj_matrix = None
+        self.frames = None
         self.methods = [self.q_learning, self.sarsa]
         self.policy = None
+    
+    def print(self,*args, **kwargs):
+        return print(f"{self._name}>",*args,**kwargs)
+    
+    def strategy(self):
+        return self.policy
+    
+    def add_agents(self, agents):
+        try:
+            for agent in agents:
+                self._add_agent(agent)
+        except TypeError:
+            self._add_agent(agents)
+    
+    def _add_agent(self, agent):
+        from maspy.agent import Agent
+        assert isinstance(agent,Agent)
         
+        if type(agent).__name__ in self.agent_list:
+            if agent.my_name[0] in self.agent_list[type(agent).__name__]:
+                self.agent_list[type(agent).__name__][agent.my_name[0]].update({agent.my_name})
+                self._agents[agent.my_name] = agent
+            else:
+                self.agent_list[type(agent).__name__].update({agent.my_name[0] : {agent.my_name}})
+                self._agents[agent.my_name] = agent
+        else:
+            self.agent_list[type(agent).__name__] = {agent.my_name[0] : {agent.my_name}}
+            self._agents[agent.my_name] = agent
+        
+        self.print(f'Connecting agent {type(agent).__name__}:{agent.my_name}') if self.full_log else ...
+        
+    def set_params(self, map_size=10, num_targets=10, wall_perc=0.1,
+                epsilon=0.01, num_pop=5, num_step=50, num_iter=100):
+        self.map_size = int(map_size)
+        self.num_targets = int(num_targets)
+        self.wall_perc = wall_perc
+        self.epsilon = epsilon
+        self.num_pop = int(num_pop)
+        self.num_step = int(num_step)
+        self.num_iter = int(num_iter)
+    
+    def set_env(self, map):
+        self.env = self.model(map)
+        size = self.env.num_rows*self.env.num_cols
+        self.adj_matrix = np.zeros((size, size), dtype=int) 
+        self.frames = []
+    
+    def get_action_reward(self, coordinates: tuple):
+        state = self.env.encode(*coordinates)
+        actions = self.policy[state]
+        action =  np.argmax(actions)
+        self.env.set_state(state)
+        s, r, t, d = self.env.look(action)
+        return action, r
+    
     def normalize(self, numbers):
         min_val = min(numbers)
         max_val = max(numbers)
@@ -370,7 +457,9 @@ class learning:
             print(f'Submatrix:\n{self.submatrix(adj_matrix,[state,state],1)}')
             return None
 
-    def show_frames(self, frames):
+    def show_frames(self, frames=None):
+        if not frames:
+            frames = self.frames
         for i, frame in enumerate(frames):
             system('cls')
             print(frame['frame'])
@@ -385,10 +474,14 @@ class learning:
             sys.stdout.flush()
             sleep(0.8)
 
-    def random_map(self, size, num_targets, max_wall_perc=0.1):
-        wall_num = int(max_wall_perc*size*size) + np.random.randint(int(max_wall_perc*size*size))
+    def random_map(self):
+        size = self.map_size
+        if self.wall_perc > 0:
+            wall_num = int(self.wall_perc*size*size) + np.random.randint(int(self.wall_perc*size*size))
+        else: 
+            wall_num = 0
         wall_aux = wall_num
-        dirt_num = num_targets
+        dirt_num = self.num_targets
         dirt_aux = dirt_num
 
         #print(f'Making {(size,size)} map with {wall_num} walls and {dirt_num} dirts')
@@ -448,11 +541,30 @@ class learning:
             radius-y+subm_cols.start:radius-y+subm_cols.stop] = matrix[subm_rows, subm_cols]
         return subm
 
-    def q_learning(self, q_table, epsilon, e, num_steps=50, num_iter=500):
+    def multi_reward_log(self, max, x, factor=10):
+        try:
+            value = ((1-factor)/math.log(max))*math.log(x)+factor
+        except ValueError:
+            print(f'This: {max} - {x} - {factor} resulted in error')
+            print(f'Error: {(1-factor)}/{math.log(max)}*{math.log(x)}+{factor}')
+        return value
+
+    def all_targets_reached(self, e):
+        for col in e.desc:
+            if -2 in col:
+                return False
+        return True
+    
+    def q_learning(self, q_table, epsilon, e, num_steps=50, num_iter=500,show_log=False):
+        assert isinstance(e,learning_model)
+        
         alpha = 0.1
-        gamma = 0.9 
+        gamma = 0.95 
         sum_acumulated_reward = []
+        convergence_threshold = 0.001
+        prev_Q = np.copy(q_table)
         size = e.num_states
+        max_steps_reward = size
         # Matrix de adjacencia do grafo de exploracao  
         for idx in range(1,num_iter+1):
             adj_matrix = np.zeros((size, size), dtype=int)
@@ -463,10 +575,14 @@ class learning:
             path_actions = []
             best_states = []
             steps = 0
+            last_step = 0
             while steps < num_steps:
                 action, possible_states, path_actions = self.choose_action(e, epsilon, state, q_table, adj_matrix, path_actions)
-                next_state, reward, _ = e.step(action)
-                acumulated_reward += reward
+                next_state, reward,_,_ = e.step(action)
+                if reward > 0:
+                    reward = reward*self.multi_reward_log(max_steps_reward,steps-last_step+1,3)
+                    last_step = steps
+                acumulated_reward += int(reward)
                 
                 if next_state in best_states:
                     best_states.remove(next_state)
@@ -485,18 +601,33 @@ class learning:
                 # Linha onde ocorre a retencao do aprendizado
                 q_table[state, action] = q_table[state, action] + alpha*(reward + gamma * np.max(q_table[next_state]) - q_table[state, action])
                 state = next_state
+                
+                #if acumulated_reward >= 10*self.num_targets:
+                    #break
+                if self.all_targets_reached(e): break
                 steps += 1
-
+                
             sum_acumulated_reward.append(acumulated_reward)
-            if idx == 1:
+            if show_log and idx == 1:
                 print(f"{acumulated_reward}",end=" >> ")
                 sys.stdout.flush()
-            if idx == num_iter:
-                print(f"{np.mean(sum_acumulated_reward,dtype=int)}",end=" | ")
-                sys.stdout.flush()
+                
+            if idx > 10:
+                delta = np.abs(q_table - prev_Q).max()
+                if idx%1000 == 0: print(f'{idx}> Delta: {delta}')
+                if delta < convergence_threshold:
+                    break
+            prev_Q = np.copy(q_table)
+        
+        if show_log:
+            print(f"{np.mean(sum_acumulated_reward,dtype=int)} | idx[{idx}]",end=" | ")
+            sys.stdout.flush()
+        
         return q_table
 
     def choose_action(self, e, epsilon, state, table, adj_matrix, path_actions):
+        assert isinstance(e,learning_model)
+        
         possible_actions = e.action_mask(state)
         possible_states = e.actions_to_states(possible_actions)
         _, best_actions = e.sensor()
@@ -507,7 +638,7 @@ class learning:
         else:                       
             for ia, act in enumerate(possible_actions): # Verificar disponibilidade de acoes
                 if act == 1:
-                    s,_,_ = e.look(ia)
+                    s,_,_,_ = e.look(ia)
                     if adj_matrix[s,s] > 1 and ia != 4:
                         possible_actions[ia] = 0
                 
@@ -533,9 +664,11 @@ class learning:
                 action = np.argmax(actions) # Utilizar valores aprendidos
         return action, possible_states, path_actions
 
-    def sarsa(self, s_table, epsilon, e, num_steps=50, num_iter=500):
+    def sarsa(self, s_table, epsilon, e, num_steps=50, num_iter=500,show_log=False):
+        assert isinstance(e,learning_model)
+        
         alpha = 0.1
-        gamma = 0.9 
+        gamma = 0.95
         sum_acumulated_reward = []
         size = e.num_states
         for idx in range(1,num_iter+1):
@@ -549,7 +682,7 @@ class learning:
             action,possible_states,path_actions = self.choose_action(e,epsilon,state,s_table,adj_matrix,path_actions)
             steps = 0
             while steps < num_steps:
-                next_state, reward, _ = e.step(action)
+                next_state, reward,_,_ = e.step(action)
                 acumulated_reward += reward
                 
                 # Ajustes na matrix de adjacencia
@@ -574,25 +707,28 @@ class learning:
                 steps += 1
 
             sum_acumulated_reward.append(acumulated_reward)
-            if idx == 1:
-                print(f"{acumulated_reward}",end=" >> ")
-                sys.stdout.flush()
-            if idx == num_iter:
-                print(f"{np.mean(sum_acumulated_reward,dtype=int)}",end=" | ")
-                sys.stdout.flush()
+            if show_log:
+                if idx == 1:
+                    print(f"{acumulated_reward}",end=" >> ")
+                    sys.stdout.flush()
+                if idx == num_iter:
+                    print(f"{np.mean(sum_acumulated_reward,dtype=int)}",end=" | ")
+                    sys.stdout.flush()
         return s_table
 
-    def learn(self, method_index=0):
-        print(f'  Average Reward of\n  First and Last Iteration')
+    def learn(self, method_index=0, show_log=False):
+        print(f"Learning with {self.methods[method_index].__name__}...")
+        print(f'  Average Reward for {self.num_step} steps\n  First and Last Iteration') if show_log else ...
         table = np.zeros([self.map_size**2, self.model().num_actions])
         method = self.methods[method_index]
+        start_time = time.time()
         for i in range(1, self.num_pop+1):
-            print(f'Map {i}: ',end='')
-            map = self.random_map(self.map_size, self.num_targets)
+            print(f'Map {i}: ',end='') if show_log else ...
+            map = self.random_map()
             env = self.model(map)
-            table = method(table, self.epsilon, env, self.num_step, self.num_iter) 
-            print('')
-
+            table = method(table, self.epsilon, env, self.num_step, self.num_iter,show_log) 
+            print('') if show_log else ...
+        print(f"Finished in {round(time.time()-start_time,4)} seconds!")
         self.policy = table
         
     def exec(self, env, state, num_steps=1, show=False):
@@ -626,7 +762,7 @@ class learning:
             else:
                 for ia, act in enumerate(possible_actions):
                     if act == 1:
-                        s,_,_ = env.look(ia)
+                        s,_,_,_ = env.look(ia)
                         if self.adj_matrix[s,s] > 1 and ia != 4:
                             possible_actions[ia] = 0
                 actions = np.multiply(self.policy[state],possible_actions)
@@ -653,7 +789,7 @@ class learning:
                             sys.exit()
                     action = path_actions.pop(0)
 
-            frames.append({
+            self.frames.append({
                 'frame': env.render(self.adj_matrix),
                 'state': state,
                 'action': env.last_action,
@@ -665,7 +801,7 @@ class learning:
             })
 
             actions_taken.append(action)
-            next_state, reward, _ = env.step(action)
+            next_state, reward,_,_ = env.step(action)
             states_arrived.append(next_state)
 
             self.adj_matrix[next_state,next_state] = 2
@@ -681,7 +817,9 @@ class learning:
         
         if show:
             self.show_frames(frames)
-        return actions_taken, states_arrived
+        if num_steps == 1:
+            return actions_taken[0], states_arrived[0], acumulated_reward
+        return actions_taken, states_arrived, acumulated_reward
         
         
 

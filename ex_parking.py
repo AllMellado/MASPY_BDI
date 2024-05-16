@@ -30,7 +30,6 @@ class Manager(Agent):
         self.add(Belief("spotPrice",rnd.randint(12,20),adds_event=False))
         self.add(Belief("minPrice",rnd.randint(6,10),adds_event=False))
 
-    
     @pl(gain,Goal("sendPrice"),Belief("spotPrice","SP"))
     def send_price(self,src,spot_price):
         self.send(src,achieve,Goal("checkPrice",spot_price),"Parking")

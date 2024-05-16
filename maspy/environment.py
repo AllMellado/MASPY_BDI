@@ -48,6 +48,11 @@ class Percept:
 
         return hash((self.key, args_hashable, self.group))
 
+@dataclass
+class Model:
+    actions: list
+    state_type: str = "Discrete"
+
 class EnvironmentMultiton(type):
     _instances: Dict[str, "Environment"] = {}
     _lock: Lock = Lock()
@@ -168,13 +173,8 @@ class Environment(metaclass=EnvironmentMultiton):
         if type(args) is not tuple: args = (args,)
         return Percept(key,args,group) in self._percepts[group][key]
 
-    def delete(self, 
-            key: str, 
-            args: Optional[Any] = tuple(), 
-            group: Optional[str] = DEFAULT_GROUP,
-        ):
-        if type(args) is not tuple: args = (args,) 
-        self._percepts[group][key].remove(Percept(key,args,group))
+    def delete(self, percept: Iterable[Percept] | Percept):
+        self._percepts[self._my_name][percept.key].remove(percept)
               
     def _clean(
         self, percept_data: Iterable[Percept] | Percept
@@ -188,9 +188,9 @@ class Environment(metaclass=EnvironmentMultiton):
                 percept_dict = dict()
                 for prc_dt in percept_data:
                     if prc_dt.key in percept_dict[self._my_name]:
-                        percept_dict[prc_dt.group][prc_dt.key].add(prc_dt)
+                        percept_dict[self._my_name][prc_dt.key].add(prc_dt)
                     else:
-                        percept_dict[prc_dt.group].update({prc_dt.key: {prc_dt}})
+                        percept_dict[self._my_name].update({prc_dt.key: {prc_dt}})
 
                 return percept_dict
             case _:
