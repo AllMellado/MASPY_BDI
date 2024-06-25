@@ -99,7 +99,7 @@ class Channel(metaclass=CommsMultiton):
             f"Desconnecting agent {type(agent).__name__}:{agent.my_name}"
         ) if self.show_exec else ...
 
-    def _send(self, sender: tuple, target: Union[Agt_name, Iterable[Agt_name], broadcast], act: ACT | str, message: Union[str, 'Belief', 'Goal', 'Ask', 'Plan'] | list[Union[str, 'Belief', 'Ask', 'Goal', 'Plan']]):  
+    def _send(self, sender: tuple, target: Union[Agt_name, Iterable[Agt_name], broadcast], act: ACT | str, message: Union['Belief', 'Goal', 'Ask', 'Plan'] | list[Union['Belief', 'Ask', 'Goal', 'Plan']]):  
         if type(act) == TypeVar: 
             act = act.__name__ 
         
