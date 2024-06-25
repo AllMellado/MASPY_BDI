@@ -1,10 +1,11 @@
 from threading import Lock
-from typing import Any, Dict, Optional, Set, List
+from typing import Dict, Set, List, TYPE_CHECKING, Union, Optional
 from dataclasses import dataclass, field
 from collections.abc import Iterable
-from maspy.utils import utils
-from maspy.error import InvalidPerceptError
-from copy import deepcopy
+from maspy.utils import manual_deepcopy, merge_dicts
+
+if TYPE_CHECKING:
+    from maspy.agent import Agent
 
 DEFAULT_GROUP = "default"
 
@@ -44,9 +45,15 @@ class Percept:
         for arg in self.args:
             args_hashable.append(arg)
 
-        args_hashable = tuple(args_hashable)
+        args_tuple: tuple = tuple(args_hashable)
 
-        return hash((self.key, args_hashable, self.group))
+        return hash((self.key, args_tuple, self.group))
+
+    def __str__(self) -> str:
+        return f"Percept{self.key,self._args}"
+    
+    def __repr__(self):
+        return self.__str__()
 
 @dataclass
 class Model:
@@ -62,30 +69,36 @@ class EnvironmentMultiton(type):
             _my_name = env_name if env_name else str(cls.__name__)
             if _my_name not in cls._instances:
                 vars = []
-                if env_name: vars.append(env_name)
-                if full_log: vars.append(full_log)
+                if env_name: 
+                    vars.append(env_name)
+                if full_log: 
+                    vars.append(full_log)
                 instance = super().__call__(*vars)
                 cls._instances[_my_name] = instance
         return cls._instances[_my_name]
 
 class Environment(metaclass=EnvironmentMultiton):
-    def __init__(self, env_name=None,full_log=False):
+    def __init__(self, env_name: Optional[str]=None,full_log: bool=False):
         self._my_name = env_name if env_name else type(self).__name__
-        self.full_log = full_log
+        self.show_exec = full_log
+        self.lock = Lock()
         
         from maspy.admin import Admin
         Admin()._add_environment(self)
+        #  dict[Agt_cls, dict[Agt_name, set[Agt_fullname]]]
+        self.agent_list: dict[str, dict[str, set[tuple]]] = dict()
+        #  dict[Agt_fullname, Agt_inst]
+        self._agents: dict[tuple, 'Agent'] = dict()
         
-        self.agent_list = {}
-        self._agents = {}
         self._name = f"Environment:{self._my_name}"
-        self._percepts: Dict[str, Dict[str, Set[Percept]]] = dict()
+        #  dict[env_name, dict[percept_key, set[Percept]]]
+        self._percepts: dict[str, Dict[str, Set[Percept]]] = dict()
     
     def print(self,*args, **kwargs):
         return print(f"{self._name}>",*args,**kwargs)
     
-    def perception(self):
-        return deepcopy(self._percepts)
+    def perception(self) -> dict[str, Dict[str, Set[Percept]]]:
+        return manual_deepcopy(self._percepts)
 
     @property
     def print_percepts(self):
@@ -96,14 +109,15 @@ class Environment(metaclass=EnvironmentMultiton):
                     percepts += f"{percept}\n"
         print(f"{percepts}\r")
         
-    def add_agents(self, agents):
-        try:
+    def add_agents(self, agents: Union[list['Agent'],'Agent']):
+        if isinstance(agents, list):
             for agent in agents:
                 self._add_agent(agent)
-        except TypeError:
+        else:
             self._add_agent(agents)
     
-    def _add_agent(self, agent):
+    def _add_agent(self, agent: 'Agent'):
+        assert isinstance(agent.my_name, tuple)
         if type(agent).__name__ in self.agent_list:
             if agent.my_name[0] in self.agent_list[type(agent).__name__]:
                 self.agent_list[type(agent).__name__][agent.my_name[0]].update({agent.my_name})
@@ -115,15 +129,15 @@ class Environment(metaclass=EnvironmentMultiton):
             self.agent_list[type(agent).__name__] = {agent.my_name[0] : {agent.my_name}}
             self._agents[agent.my_name] = agent
         
-        self.print(f'Connecting agent {type(agent).__name__}:{agent.my_name}') if self.full_log else ...
+        self.print(f'Connecting agent {type(agent).__name__}:{agent.my_name}') if self.show_exec else ...
     
-    def create(self, 
-            percept: Iterable[Percept] | Percept
-        ):
-        percept_dict = self._clean(percept)
-            
-        utils.merge_dicts(percept_dict, self._percepts)
-        self.print(f"Creating {percept}") if self.full_log else ...
+    def create(self, percept: list[Percept] | Percept):
+        with self.lock:
+            percept_dict = self._clean(percept)
+            aux_percepts = manual_deepcopy(self._percepts)
+            merge_dicts(percept_dict, aux_percepts)
+            self._percepts = aux_percepts
+            self.print(f"Creating {percept}") if self.show_exec else ...
 
     def get(self, percept:Percept, all=False, ck_group=False, ck_args=True) -> List[Percept] | Percept | None:
         found_data = []
@@ -138,7 +152,7 @@ class Environment(metaclass=EnvironmentMultiton):
                             
         return found_data if found_data else None
                     
-    def _compare_data(self, data1: Percept, data2: Percept, ck_group,ck_args):
+    def _compare_data(self, data1: Percept, data2: Percept, ck_group:bool,ck_args:bool) -> bool:
         #self.print(f"Comparing: \n\t{data1} and {data2}")
         if ck_group and data1.group != data2.group:
         #    self.print("Failed at group")
@@ -166,26 +180,38 @@ class Environment(metaclass=EnvironmentMultiton):
             return True
     
     def change(self, old_percept:Percept, new_args:Percept.args):
-        if type(new_args) is not tuple: new_args = (new_args,) 
-        old_percept._args = new_args
+        if type(new_args) is not tuple: 
+            new_args = (new_args,) 
+        if old_percept.args_len > 0:
+            percept = self.get(old_percept)
+        else:
+            percept = self.get(old_percept,ck_args=False)
+        if isinstance(percept, Percept):
+            percept._args = new_args
             
     def _percept_exists(self, key, args, group=DEFAULT_GROUP) -> bool:
-        if type(args) is not tuple: args = (args,)
+        if type(args) is not tuple: 
+            args = (args,)
         return Percept(key,args,group) in self._percepts[group][key]
 
-    def delete(self, percept: Iterable[Percept] | Percept):
-        self._percepts[self._my_name][percept.key].remove(percept)
+    def delete(self, percept: list[Percept] | Percept):
+        try:
+            if isinstance(percept, list):
+                for prcpt in percept:
+                    self._percepts[prcpt.group][prcpt.key].remove(prcpt)
+            else:
+                self._percepts[self._my_name][percept.key].remove(percept)
+        except KeyError:
+            self.print(f'Percept {percept} couldnt be deleted')
               
-    def _clean(
-        self, percept_data: Iterable[Percept] | Percept
-    ) -> Dict:
+    def _clean(self, percept_data: Iterable[Percept] | Percept) -> Dict:
         match percept_data:
             case None:
                 return dict()
             case Percept():
                 return {self._my_name : {percept_data.key: {percept_data}}}
             case Iterable():
-                percept_dict = dict()
+                percept_dict: dict = dict()
                 for prc_dt in percept_data:
                     if prc_dt.key in percept_dict[self._my_name]:
                         percept_dict[self._my_name][prc_dt.key].add(prc_dt)

@@ -10,6 +10,8 @@ class Sample(Agent):
         self.stop_cycle() # para terminar o agente
         
 if __name__ == "__main__":
+    print("A" == "a", 'a' == "a", "a" == 'A')
+    exit()
     # agent_list = []  --> Nao necessario mais
     for i in range(10): # Reduzi para 10
         ag = Sample("Ag") # Nao necessario diferenciar o nome dos agentes 

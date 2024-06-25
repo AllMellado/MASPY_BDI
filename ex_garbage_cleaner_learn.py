@@ -1,3 +1,6 @@
+# ruff: noqa
+# mypy: ignore-errors
+
 from maspy import *
 from random import randint
 import traceback
@@ -24,7 +27,7 @@ class Room(Environment):
 
 class Robot(Agent):
     def __init__(self, name, initial_env=None, full_log=False, print_path=True):
-        super().__init__(name, full_log=full_log)
+        super().__init__(name, show_exec=full_log)
         self.connect_to(initial_env)
         self.add(Goal("decide_move"))
         self.position = (0,0)

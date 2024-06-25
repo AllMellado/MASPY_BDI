@@ -3,15 +3,15 @@ from maspy import *
 
 class DummyAgent(Agent):
     def __init__(self, name,  beliefs, goals):
-        super().__init__(name, beliefs, goals, full_log=False)
+        super().__init__(name, beliefs, goals, show_exec=False)
         self.add(Belief("Box",(5,10)))
         
     @pl(gain,Goal("move_boxes"),Belief("Box",('X','Y')))
     def move_to_pos(self, src, x, y):
-        my_pos = self.get(Belief("my_pos",('My_X','My_Y')))[0]
+        my_pos = self.get(Belief("my_pos",('My_X','My_Y')))
         self.move(my_pos.args, (x,y))
         self.print(f"Picking up Box in {x,y}")
-        target_pos = self.get(Belief("target_pos",('Tg_X','Tg_Y')))[0]
+        target_pos = self.get(Belief("target_pos",('Tg_X','Tg_Y')))
         self.move((x,y), target_pos.args)
         self.print(f"Putting Box in {target_pos.args}")
         self.stop_cycle()
