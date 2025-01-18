@@ -21,7 +21,6 @@ class MonitoramentoUrbano(Environment):
         else:            
             self.print("Obstaculo nao desviado!")
             self.create(Percept("obstaculo_nao_resolvido"))
-        #self.print_percepts
 
 class VA(Agent):
     def __init__(self, agt_name):
@@ -34,9 +33,9 @@ class VA(Agent):
         percepcao1 = self.get(Belief("tem_obstaculo",source="BR101"))
         self.print(percepcao1.key)       
         if percepcao1:                   
-            self.action("BR101").desviar_obstaculo(self.my_name)
+            self.desviar_obstaculo()
             
-        self.perceive("all")
+        self.perceive('BR101')
         
         percepcao2 = self.get(Belief("obstaculo_resolvido",source="BR101"))
         if percepcao2:
@@ -70,10 +69,10 @@ class Stakeholder(Agent):
         self.stop_cycle()
 
 if __name__ == "__main__":    
-    #Admin().set_logging(True,True,True,True,True)
     monitor = MonitoramentoUrbano("BR101")
     veiculo = VA("Waymo")
     controlador = Stakeholder("ControladorRemoto")
     comunicacao_ch = Channel("V2C")
+    Admin().report = True
     Admin().connect_to([veiculo,controlador],[comunicacao_ch,monitor])
     Admin().start_system()

@@ -1,5 +1,3 @@
-# ruff: noqa
-
 from maspy import *
 from random import choice
 
@@ -26,13 +24,13 @@ class VA(Agent):
     @pl(gain, Goal("cruzar"), Belief("no_cruzamento"))
     def realizar_cruzamento(self, src):
         self.print("Realizando o cruzamento")
-        self.action("C1").cruzar(self.my_name)
+        self.action("C1").cruzar(self.tuple_name)
         self.stop_cycle()
         
     @pl(gain, Goal("aguardar"), Belief("no_cruzamento"))
     def aguardar(self, src):
         self.print("Aguardando")
-        self.action("C1").aguardar(self.my_name)
+        self.action("C1").aguardar(self.tuple_name)
         self.send("CT",achieve,Goal("verificar_cruzamento"))
         
 class CT(Agent):
@@ -54,7 +52,6 @@ if __name__=="__main__":
     c1 = Cruzamento("C1")
     ag1 = VA("VA")
     ag2 = CT("CT")
-    #ag2.show_prct = True
     Admin().connect_to([ag1,ag2],c1)
     Admin().start_system()    
     

@@ -6,12 +6,12 @@ class Crossing(Environment):
         self.create(Percept("traffic_light",("green",)))
     
     def cross(self, src):
-        self.print(f"Agent {src.my_name} is now crossing")
+        self.print(f"Agent {src} is now crossing")
 
 class Cross_Manager(Agent):
-    @pl(gain,Belief("traffic_light","Color"))
-    def traffic_light(self,src,color,):
-        vehicles = self.find_in("Vehicle","Env","Cross_Junction")
+    @pl(gain, Belief("traffic_light","Color"))
+    def traffic_light(self,src,color):
+        vehicles = self.get_agents_name("Vehicle","Env","Cross_Junction")
         for vehicle in vehicles["Vehicle"]:
             self.print(f"Detected traffic light: {color} in env {src} - sending signal to {vehicle}")
             self.send(vehicle,achieve,Goal("crossing_over"),"Crossing")
@@ -27,8 +27,8 @@ class Vehicle(Agent):
     @pl(gain,Goal("crossing_over"))
     def crossing(self,src):
         self.print(f"Confirmation for crossing by {src}")
-        self.action("Cross_Junction").cross(self)
-        self.print(f"Crossing Completed")
+        self.cross()
+        self.print("Crossing Completed")
         self.send(src,tell,Belief("leaving_junction"),"Crossing")
         self.stop_cycle()
 

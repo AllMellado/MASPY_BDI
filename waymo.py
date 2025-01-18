@@ -39,7 +39,7 @@ class VA(Agent):
         percepcao1 = self.get(Belief("tem_obstaculo",source="BR101"))
         self.print(percepcao1.key)       
         if percepcao1:                   
-            flag = self.action("BR101").desviar_obstaculo(self.my_name)
+            flag = self.action("BR101").desviar_obstaculo(self.tuple_name)
         if flag == True:
             self.print("Desvio realizado com sucesso!")
             self.stop_cycle()

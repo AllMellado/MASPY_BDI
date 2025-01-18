@@ -1,7 +1,7 @@
 from maspy import *
 
 class Room(Environment):
-    def add_dirt(self, position):
+    def add_dirt(self, agent, position):
         self.print(f"Dirt created in position {position}")
         dirt_status = self.get(Percept("dirt","Statuses"))
         dirt_status.args[position] = False # changes the dict inside percept
@@ -25,8 +25,8 @@ class Robot(Agent):
     def decide_move(self,src):
         min_dist = float("inf")
         target = None
-        
-        dirt_pos = self.get(Belief("dirt","Pos","Room"))
+ 
+        dirt_pos = self.get(Belief("dirt",Any,"Room"))
         print(f"{dirt_pos.args}")
         x, y = self.position
         for pos, clean in dirt_pos.args.items():
@@ -41,7 +41,7 @@ class Robot(Agent):
             self.rm(Belief("room_is_dirty"))
             self.add(Belief("room_is_clean"))
             print("*** Finished Cleaning ***")
-            self.stop_cycle()
+            Admin().stop_all_agents()
         else:
             self.print(f"Moving to {target}")
             self.add(Goal("move",target))
@@ -49,11 +49,12 @@ class Robot(Agent):
     @pl(gain,Goal("clean_dirt"))                            
     def clean(self,src):
         if self.has(Belief("room_is_dirty")):
-            self.action("Room").clean_position(self.my_name, self.position)
+            self.clean_position(self.position)
             self.add(Goal("decide_move"))
     
-    @pl(gain,Goal("move",("X","Y")))
-    def move(self,src,tgX,tgY):
+    @pl(gain,Goal("move",(Any,Any)))
+    def move(self,src,target):
+        tgX,tgY = target
         x, y = self.position
 
         self.print(tgX,tgY," - ",x,y)

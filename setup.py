@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.2.1'
-DESCRIPTION = 'Multi-Agent Systems in Python with Machine Learning'
+VERSION = '0.5.4'
+DESCRIPTION = 'Multi-Agent System for Python (MASPY) with Machine Learning proprieties'
 LONG_DESCRIPTION = 'A library for the devolopment of multi-agent systems with components of machine learning'
 
 # Setting up
@@ -13,8 +13,8 @@ setup(
     description=DESCRIPTION,
     long_description_content_type="text/markdown",
     long_description=LONG_DESCRIPTION,
-    packages=find_packages(),
-    install_requires=[],
+    package_data={"maspy": ["py.typed","*.pyi"]},
+    install_requires=['numpy','pandas','openpyxl'],
     keywords=['python', 'autonomous agents', 'multi-agent system', 'machine learning'],
     classifiers=[
         "Development Status :: 5 - Production/Stable",

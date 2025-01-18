@@ -10,8 +10,17 @@ class Room(Environment):
         super().__init__(env_name, full_log)
         self.create(Percept("room_is_dirty",adds_event=False))
     
-    def clean_position(self, agent, position):
-        self.print(f"{agent} is cleaning position {position}")
+    @action("single")
+    def put_box(self, agent, position):
+        self.print(f"{agent} is putting box in position {position}")
+        dirt_status = self.get(Percept("dirt","Statuses"))
+        assert isinstance(dirt_status.args,dict)
+        dirt_status.args[position] = False
+        self.delete(Percept("room_is_dirty",adds_event=False))
+    
+    @action("single")
+    def pick_box(self, agent, position):
+        self.print(f"{agent} is pciking box in position {position}")
         dirt_status = self.get(Percept("dirt","Statuses"))
         assert isinstance(dirt_status.args,dict)
         if dirt_status.args[position] is False:
@@ -51,7 +60,7 @@ class Robot(Agent):
     
     @pl(gain,Goal("clean_dirt"),Belief("room_is_dirty"))                            
     def clean(self,src):
-        self.action("Room").clean_position(self.tuple_name, self.position)
+        self.action("Room").clean_position(self.my_name, self.position)
         self.print("Position cleaned. Deciding next move...") if self.print_path else ...
         self.add(Goal("decide_move"))
         
