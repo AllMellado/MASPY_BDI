@@ -31,7 +31,7 @@ class VA(Agent):
     def verifica_via_urbana(self,src):
         self.print("Verificar via urbana")
         percepcao1 = self.get(Belief("tem_obstaculo",source="BR101"))
-        self.print(percepcao1.key)       
+        self.print(percepcao1.name)       
         if percepcao1:                   
             self.desviar_obstaculo()
             

@@ -1,16 +1,18 @@
 from maspy import *
 from maspy.learning import *
+from time import sleep
 
 class Map(Environment):
     def __init__(self, env_name=None):
         super().__init__(env_name)
         
-        self.targets = [(1,4),(3,2)]
-        self.max_row = 5
-        self.max_col = 5
-        size = (self.max_row+1,self.max_col+1)
-        self.create(Percept("location", size, cartesian))
-        self.possible_starts = {"location": [(0,0),(4,4),(0,5),(5,3)]}
+        self.target = (2,2)
+        self.max_row = 4
+        self.max_col = 4
+        self.create(Percept("location", (self.max_row+1,self.max_col+1), cartesian))
+        #self.create(Percept("target", ((0,0),(1,2)), listed))
+        self.possible_starts = {"location": [(0,0),(2,2)]}
+        #self.possible_starts = "off-policy"
     
     def move_transition(self, state: dict, direction: str):
         location = state["location"]
@@ -19,24 +21,26 @@ class Map(Environment):
             
         state["location"] = location
         
-        if location in self.targets:
-            reward = 10
+        if location == self.target:
+            reward = 100
             terminated = True
         else:
             reward = -1
             terminated = False
         return state, reward, terminated
 
-    @action(listed, ("up","down","left","right"), move_transition)
+    @action(listed, ["up","down","left","right"], move_transition)
     def move(self, agt, direction: str):
+        self.print(f"{agt} is Moving {direction}")
         percept = self.get(Percept("location", (Any,Any)))
         assert isinstance(percept, Percept)
-        self.print(f"{agt} in {percept.args} is Moving {direction}")
         new_location = self.moviment(percept.args, direction)
         self.change(percept, new_location)
         self.print_percepts
-        if new_location in self.targets:
-            self.print(f"{agt} reached a target")
+        if new_location == self.target:
+            self.print(f"{agt} reached the target")
+            Admin().stop_all_agents()
+        sleep(2)
     
     def moviment(self, location, direction):
         if direction == "up" and location[0] > 0:
@@ -58,6 +62,7 @@ if __name__ == "__main__":
     print(f'actions: {model.action_space}  space: {model.observation_space}')
     model.learn(qlearning)
     ag = Sample()
+    ag.auto_action = True
     ag.add_policy(model)
     Admin().start_system()
     

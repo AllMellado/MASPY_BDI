@@ -1,4 +1,4 @@
-from threading import Lock, Thread
+from threading import Lock, Thread, Event
 from typing import Any, Dict, List, Union, Optional, TypeVar
 from collections.abc import Iterable
 from maspy.environment import Environment
@@ -8,31 +8,111 @@ from maspy.utils import bcolors
 from maspy.learning.modelling import EnvModel
 import pprint
 import signal
+import json
+import logging.config
+import logging.handlers
 import pandas as pd # type: ignore
 from time import sleep, time
+from pathlib import Path
+import atexit
 import os
-import sys
+import sys, queue 
+
+MASPY_VERSION = "2025.06.07"
 
 TAgent = TypeVar('TAgent', bound=Agent)
 TEnv = TypeVar('TEnv', bound=Environment)
 TChannel = TypeVar('TChannel', bound=Channel)
 
+stderr = {"stderr": {
+            "class": "logging.StreamHandler",
+            "level": "DEBUG",
+            "formatter": "simple",
+            "stream": "ext://sys.stderr"
+        }}
+
+file_json = {"file_json": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "DEBUG",
+            "formatter": "simple_json",
+            "filename": "logs/maspy.log.jsonl"
+        }}
+
+listener = {"listener": {
+            "class": "maspy.logger.QueueListener",
+            "level": "DEBUG",
+            "formatter": "simple_json" 
+        }}
+
+def setup_logging(
+        enable_console: bool = False,
+        enable_file: bool = False,
+        enable_listener: bool = False
+    ):
+    config_file = Path(f"{os.path.dirname(__file__)}/logger_config.json")
+    with open(config_file) as f:
+        config = json.load(f)
+
+    if enable_file:
+        config["handlers"].update(file_json)
+        config["handlers"]["queue_handler"]["handlers"].append("file_json")
+        if not os.path.exists("logs"):
+            os.makedirs("logs")
+
+        main_name = os.path.basename(sys.argv[0]).split(".py")[0]
+        counter = 1
+        filename = f"{main_name}_{counter}"
+        while os.path.exists(f"logs/{filename}.log.jsonl"):
+            counter += 1
+            filename = f"{main_name}_{counter}"
+        config["handlers"]["file_json"]["filename"] = f"logs/{filename}.log.jsonl"
+    
+    if enable_console:
+        config["handlers"].update(stderr)
+        config["handlers"]["queue_handler"]["handlers"].append("stderr")
+    
+    if enable_listener:
+        config["handlers"].update(listener)
+        config["handlers"]["queue_handler"]["handlers"].append("listener")
+
+    logging.config.dictConfig(config)
+    queue_handler = logging.getHandlerByName("queue_handler")
+    if queue_handler is not None:
+        assert(isinstance(queue_handler, logging.handlers.QueueHandler))
+        assert queue_handler.listener is not None
+        queue_handler.listener.start()
+        atexit.register(queue_handler.listener.stop)
+
 class AdminMeta(type):
     _instances: Dict[str, Any] = {}
     _lock: Lock = Lock()
-
     def __call__(cls, *args, **kwargs):
         with cls._lock:
             if cls not in cls._instances:
                 instance = super().__call__(*args, **kwargs)
                 cls._instances[cls] = instance
         return cls._instances[cls]
-class Admin(metaclass=AdminMeta):
-    def __init__(self:'Admin') -> None:
+    
+    def reset_instance(cls, *args, **kwargs):
+        cls._instances = super().__call__(*args, **kwargs)
+        return cls._instances[cls]
+    
+class Admin(metaclass=AdminMeta):    
+    def __init__(self:'Admin', all_log= False, console_log=False, file_log=False, listener_log=False) -> None:
+        self.logger = logging.getLogger("maspy")
+        self.sys_settings()
         signal.signal(signal.SIGINT, self.stop_all_agents)
+        self.logging = False
         self.end_of_execution = False
         self._name = f"# {type(self).__name__} #"
-        self.print("Starting MASPY Program")
+        self.print(f"Starting MASPY Program - ver.{MASPY_VERSION}")
+        if all_log:
+            self.start_logger(True,True,True)
+        elif console_log or file_log or listener_log:
+            self.start_logger(console_log, file_log, listener_log)
+        
+        self.print_queue: queue.Queue = queue.Queue()
+        self.permit_print = True
         self.show_exec = False
         self.agt_sh_exec = False
         self.agt_sh_cycle = False
@@ -40,6 +120,7 @@ class Admin(metaclass=AdminMeta):
         self.agt_sh_slct = False
         self.ch_sh_exec = False
         self.env_sh_exec = False
+        
         self._started_agents: List[Agent] = list()
         self._agent_list: Dict[tuple, str] = dict()
         self._num_agent: Dict[str, int] = dict()
@@ -49,6 +130,9 @@ class Admin(metaclass=AdminMeta):
         self._environments: Dict[str, Environment] = dict()
         self._models: Dict[str, EnvModel] = dict()
         
+        self.start_event: Event = Event()
+        
+        self.report_buffer = ""
         self.full_report = False
         self.report = False
         self._report_lock = False
@@ -56,7 +140,44 @@ class Admin(metaclass=AdminMeta):
         self.record_rate = 5
         self.start_time: float|None = None
         self.system_info: Dict[str, Any] = dict()
+    
+    def start_logger(self, enable_console, enable_file, enable_listener):
+        if self.logging:
+            return
+        self.logging = True
+        setup_logging(enable_console, enable_file, enable_listener)
+        self.logger.info(f"Starting MASPY Logging - {MASPY_VERSION}", extra={"class_name": "Admin", "my_name": ""})
         
+    def sys_settings(self, recording=False, print_running=False, cycle_speed=1):
+        self.recording = recording
+        self.number_running = print_running
+        self.cycle_speed = cycle_speed
+
+    def print_buffer(self):
+        buffer = []
+        while True:
+            try:
+                msg = self.print_queue.get(timeout=0.1)
+                if msg is None:
+                    break
+                buffer.append(msg)
+                if len(buffer) >= 1000: 
+                    sys.stdout.write("\n".join(buffer) + "\n")
+                    sys.stdout.flush()
+                    buffer.clear()
+            except queue.Empty:
+                if buffer:
+                    sys.stdout.write("\n".join(buffer) + "\n")
+                    sys.stdout.flush()
+                    buffer.clear()
+    
+    def reset_instance(self, *args, **kwargs):
+        for env in self._environments.values():
+            type(env)._instances.pop(env.my_name)
+        for ch in self._channels.values():
+            type(ch)._instances.pop(ch.my_name)
+        type(self)._instances = {}
+    
     def print(self,*args, **kwargs):
         f_args = "".join(map(str, args))
         f_kwargs = "".join(f"{key}={value}" for key, value in kwargs.items())
@@ -76,19 +197,16 @@ class Admin(metaclass=AdminMeta):
     
     def _add_agent(self, agent: Agent) -> None:
         name: Optional[str | tuple] = agent.my_name
-        # if agent.tuple_name == ("",0) :
-        #     name = type(agent).__name__
-        # else:
-        #     name = agent.tuple_name[0]
-            
         assert isinstance(name,str), f"Agent name must be a string, got {type(name)}"
         if name in self._num_agent:
-            self._agents[(name,1)].my_name = f'{name}_1'
+            self._agents[(name,1)].unique = False
             self._num_agent[name] += 1
             agent.tuple_name = (name, self._num_agent[name])
             agent.my_name = f'{name}_{str(self._num_agent[name])}'
         else:
+            agent.unique = True
             self._num_agent[name] = 1
+            agent.my_name = f'{name}_1'
             agent.tuple_name = (name, 1)
 
         
@@ -96,10 +214,12 @@ class Admin(metaclass=AdminMeta):
         
         self._agent_list[agent.tuple_name] = type(agent).__name__
         self._agents[agent.tuple_name] = agent
+        agent.printing = self.permit_print
         agent.show_exec = self.agt_sh_exec
         agent.show_cycle = self.agt_sh_cycle
         agent.show_prct = self.agt_sh_prct
         agent.show_slct = self.agt_sh_slct
+        agent.logging = self.logging
         if type(agent).__name__ in self._agent_class_color:
             agent.tcolor = self._agent_class_color[type(agent).__name__]
         else:
@@ -132,6 +252,7 @@ class Admin(metaclass=AdminMeta):
 
     def _add_channel(self, channel: Channel) -> None:
         self._channels[channel.my_name] = channel
+        channel.printing = self.permit_print
         channel.show_exec = self.ch_sh_exec
         channel.tcolor = bcolors.get_color("Channel")
         self.print(
@@ -146,12 +267,13 @@ class Admin(metaclass=AdminMeta):
 
     def _add_environment(self, environment: Environment) -> None:
         self._environments[environment.my_name] = environment
+        environment.printing = self.permit_print
         environment.show_exec = self.env_sh_exec
         environment.tcolor = bcolors.get_color("Env")
         self.print(
             f"Registering Environment {type(environment).__name__}:{environment.my_name}"
         ) if self.show_exec else ...
-    
+
     def record_info(self):
         if self.start_time is None:
             self.start_time = time()
@@ -159,22 +281,21 @@ class Admin(metaclass=AdminMeta):
         else:
             current_time = (time() - self.start_time)*1000
         current_time = round(current_time,2)
-        self.print("### RECORDING CURRENT INFO ###")
-        self.system_info[current_time] = {"agent":{},"Environment":{},"Communication":{}}
+        self.system_info[current_time] = {"Agent":{},"Environment":{},"Communication":{}}
         
         agent_info = dict()
         for agent in self._agents.values():
-            agent_info.update({agent.my_name: agent.get_info})
+            agent_info.update({agent.my_name: agent.agent_info})
         
         env_info = dict()
         for env_name, env in self._environments.items():
-            env_info.update({env_name: env.get_info})
+            env_info.update({env_name: env.env_info})
             
         ch_info = dict()    
         for ch_name, ch in self._channels.items():
-            ch_info.update({ch_name: ch.get_info})
+            ch_info.update({ch_name: ch.ch_info})
                
-        self.system_info[current_time]["agent"].update(agent_info)
+        self.system_info[current_time]["Agent"].update(agent_info)
         self.system_info[current_time]["Environment"].update(env_info)
         self.system_info[current_time]["Communication"].update(ch_info)
     
@@ -183,37 +304,50 @@ class Admin(metaclass=AdminMeta):
             return 0.000000
         return round(time() - self.start_time,6)
 
-    def start_system(self:'Admin') -> None:
+    def start_system(self:'Admin', end_if_idle: int | bool = False) -> None:
         no_agents = True
-        for model in self._models.values():
-            model.reset_percepts()
-                
-        self.start_time = time()
+        #for model in self._models.values():
+        #    model.reset_percepts()
+        pb_thread = Thread(target=self.print_buffer, daemon=True)
+        pb_thread.start()
         
+        self.start_time = time()
         if self.recording:
             self.record_info()
             
         try:
-            self.print("Starting Agents")
-            for agent_name in self._agents:
+            if not self._started_agents:
+                self.print("Starting All Agents")
+                for agent_name in self._agents:
+                    no_agents = False
+                    self._start_agent(agent_name)
+            elif self._agents:
                 no_agents = False
-                self._start_agent(agent_name)
-            
+                
             if no_agents:
-                self.print("No agents are connected")
-            
+                self.print("No Agents Created, Can't Start System")
+                return
+            self.sys_running = True
+            self.start_event.set()
+            self.print("Starting System")
             sleep(1)
             while self.running_agents():
                 if self.recording:
-                    sleep(self.record_rate)
+                    #sleep(self.record_rate)
                     self.record_info()
-                sleep(1)
+                if self.number_running:
+                    self.print_running_number()
+                sleep(self.cycle_speed)
             
             self.stop_all_agents()
+            self.sys_running = False
+            self.print_queue.put(None)   # send stop signal
+            pb_thread.join()
+            self.logger.info("MASPY Program Ended", extra={"class_name": "Admin", "my_name": ""})
         except Exception as e:
             self.print(e)
             pass
-    
+
     def running_class_agents(self, cls) -> bool:
         for agent in self._agents.values():
             if agent.tuple_name[0] == cls and agent.running:
@@ -225,6 +359,13 @@ class Admin(metaclass=AdminMeta):
             if agent.running:
                 return True
         return False
+    
+    def print_running_number(self:'Admin') -> None:
+        count = 0
+        for agent in self._agents.values():
+            if agent.running:
+                count += 1
+        self.print(f"Still Running: {count}")
 
     def print_running(self:'Admin', cls=None) -> bool:
         buffer = "Still running agent(s):\n"
@@ -242,33 +383,67 @@ class Admin(metaclass=AdminMeta):
         self, agents: Union[List[TAgent], TAgent]
     ) -> None:
         if isinstance(agents, list):
-            self.print("Starting listed agents")
+            self.print("Starting Listed Agents")
             for agent in agents:
                 assert isinstance(agent.tuple_name, tuple)
                 self._start_agent(agent.tuple_name)
         else:
             assert isinstance(agents, Agent)
-            self.print(f"Starting agent {type(agents).__name__}:{agents.tuple_name}")
+            self.print(f"Starting Agent {type(agents).__name__}:{agents.tuple_name}")
             assert isinstance(agents.tuple_name, tuple)
             self._start_agent(agents.tuple_name)
 
     def _start_agent(self, agent_name: tuple) -> None:
         try:
             if agent_name in self._started_agents:
-                self.print(f"'Agent' {agent_name} already started")
+                self.print(f"Agent {agent_name} already started")
                 return
 
             agent = self._agents[agent_name]
             self._started_agents.append(agent)
-            agent.reasoning()
+            agent.reasoning(self.start_event)
         except KeyError:
-            self.print(f"'Agent' {agent_name} not connected to environment")
+            self.print(f"'Agent' {agent_name} not connected")
             
+    def pause_system(self):
+        if self.start_event.is_set():
+            self.print("Pausing All Agents")
+            self.start_event.clear()
+            for agent in self._agents.values():
+                agent.paused_agent = True
+        else:
+            self.print("Unpausing All Agents")
+            self.start_event.set()
+            for agent in self._agents.values():
+                agent.paused_agent = False
+                
+    def stop_agents(self, agents: Union[List[TAgent], TAgent]) -> None:
+        if isinstance(agents, list):
+            self.print("Stopping Listed Agents")
+            for agent in agents:
+                assert isinstance(agent.tuple_name, tuple)
+                self._stop_agent(agent.tuple_name)
+        else:
+            assert isinstance(agents, Agent)
+            self.print(f"Stopping Agent {type(agents).__name__}:{agents.tuple_name}")
+            assert isinstance(agents.tuple_name, tuple)
+            self._stop_agent(agents.tuple_name) 
+    
+    def _stop_agent(self, agent_name: tuple) -> None:
+        try:
+            agent = self._agents[agent_name]
+            agent.stop_cycle()
+        except KeyError:
+            self.print(f"'Agent' {agent_name} not connected")
+      
     def stop_all_agents(self,sig=None,frame=None):
+        self.logger.info("Ending MASPY Program", extra={"class_name": "Admin", "my_name": ""})
         if self._report_lock:
             return
+        self._report_lock = True
+        
         self.elapsed_time = time() - self.start_time
-        self.print("[Closing System]")
+        self.print("Closing System")
         self.print_running()
         for agent in self._agents.values():
             if agent.running:
@@ -279,23 +454,24 @@ class Admin(metaclass=AdminMeta):
             #json_string = json.dumps(self.system_info, indent=2)
             pprint.pprint(self.system_info, indent=2, sort_dicts=False)
         if (self.full_report or self.report) and not self._report_lock:
-            self._report_lock = True
             self.print("Making System Report...")
-            self._print_report()
+            return self._print_report()
             self.print("System Report Completed")
-        os._exit(0)
+        #sleep(2)
+        #os._exit(0) 
     
     def _print_report(self) -> None:
-        # buffer = "\n# System Report #\n"
-        # #print(f'Confirmation (spots_sold): {self._environments["Parking"].print_percepts}')
-        # buffer += f'Elapsed Time: {round(self.elapsed_time,4)} seconds\n'
-        # buffer += f'Total Agents: {len(self._agents)}\n'
-        # for name, counter in self._num_agent.items():
-        #     buffer += f'  {name}: {counter}\n'
-        # buffer += f'Total Msgs: {self._channels["Parking"].send_counter}\n'
-        # for sender, counter in self._channels["Parking"].send_counter_agent.items():
-        #     buffer += f'  By {sender}\'s: {counter} msgs\n'
-        # print(buffer)
+        buffer = "\n# System Report #\n"
+        #print(f'Confirmation (spots_sold): {self._environments["Parking"].print_percepts}')
+        buffer += f'Elapsed Time: {round(self.elapsed_time,4)} seconds\n'
+        buffer += f'Total Agents: {len(self._agents)}\n'
+        for name, counter in self._num_agent.items():
+            buffer += f'  {name}: {counter}\n'
+        buffer += f'Total Msgs: {self._channels["Parking"].send_counter}\n'
+        for sender, counter in self._channels["Parking"].send_counter_agent.items():
+            buffer += f'  By {sender}\'s: {counter} msgs\n'
+        self.report_buffer = buffer
+        return
         log_dict: Dict[float, Dict[str, Dict[str, Any]]] = dict() 
         for instance in self._agents.values():
             for key, value in instance.cycle_log.items():
@@ -413,7 +589,7 @@ class Admin(metaclass=AdminMeta):
             for target in targets:
                 agent.connect_to(target)
 
-    def set_logging(self, show_exec: bool, show_cycle: bool=False,
+    def console_settings(self, show_exec: bool, show_cycle: bool=False,
                     show_prct: bool=False, show_slct: bool=False, 
                      set_admin=True,
                      set_agents=True,
@@ -439,7 +615,7 @@ class Admin(metaclass=AdminMeta):
             ch.show_exec = self.env_sh_exec
     
     def block_prints(self):
-        self.printing = False
+        self.permit_print = False
         for agent in self._agents.values():
             agent.printing = False
         for env in self._environments.values():
@@ -447,6 +623,22 @@ class Admin(metaclass=AdminMeta):
         for ch in self._channels.values():
             ch.printing = False
 
+    def slower_cycle(self) -> None:
+        print_flag = True
+        for agent in self._agents.values():
+            if print_flag:
+                self.print(f"Increasing delay from {agent.delay} to {agent.delay + 1}")
+                print_flag = False
+            agent.delay += 1
+    
+    def faster_cycle(self) -> None:
+        print_flag = True
+        for agent in self._agents.values():
+            if print_flag:
+                self.print(f"Decreasing delay from {agent.delay} to {max(agent.delay - 1, 0)}")
+                print_flag = False
+            agent.delay = max(agent.delay - 1, 0)
+    
     def slow_cycle_by(self, time: int | float) -> None:
         for agent in self._agents.values():
             agent.delay = time

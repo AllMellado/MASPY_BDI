@@ -1,24 +1,41 @@
 from maspy import *
 
+# FIX ASKREPLY
+# FIX NO PLAN FOR GOAL MESSAGE
+# ADD DISCRETE CYCLE
+
 class Sample(Agent):
     @pl(gain, Goal("ask",Any), 
-        ~Belief("value",Any) & ( (Belief("Test", Any) != "a") | ( Belief("Test2",(Any,5)) > 10 ) )  )
-    def asking(self,src,name,test,test2,test3):
-        self.print(f"asking {name} for value - test={test} test2={test2} test3={test3}")    
-        value = self.send(name, askOneReply, Belief("value", Any))
-        self.print(f"Got {value} from {value.source}")
+        ~Belief("Test1",Any) & (Belief("Test2", Any) > 10) 
+        )
+    def asking(self,src,name,test2):
+        self.print(f"asking {name} for value - test2={test2}")    
+        value = self.ask(name, Belief("value", Any), wait_reply=True)
+        if value:
+            self.print(f"Got {value} from {value.source}")
+        
+        Admin().stop_all_agents()
+        
     
-    @pl(gain,Belief("value", Any))
-    def got_value(self,src,value):
-        self.print(f"Got {value} from {src}")
+    @pl(gain,Belief("value1", (Any,Any,Any)), 
+        (Belief("value2", (Any,Any,Any)) > (0,6,0)) | 
+        (Belief("value2", (Any,Any,Any)) | (Belief("value3", (Any,Any,Any)) > (0,9,0)))
+        )
+    def got_value(self,src,value, value1, value2, value3):
+        self.print(f"Got {value} and {value1} or ({value2} or {value3}) from {src}")
 
 if __name__ == '__main__':
+    Channel().show_exec = True
+    ag = Sample("Ag")
+    ag.add(Belief("value1", (1,2,3)))
+    ag.add(Belief("value2", (4,5,6)))
+    ag.add(Belief("value3", (7,8,9)))
+    
     ag1 = Sample("asking")
     ag2 = Sample("informant")
     ag1.add(Goal("ask","informant"))
-    ag1.add(Belief("Test","b"))
-    ag1.add(Belief("Test2",(24,5)))
+    #ag1.add(Belief("Test1","hello")) # uncomment to break
+    ag1.add(Belief("Test2",50))
     ag2.add(Belief("value",42))
-    #Admin().report = True
     Admin().start_system()
     

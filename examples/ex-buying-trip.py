@@ -10,7 +10,11 @@ class Website(Environment):
     
     def delist_trip(self, agt, trip):
         self.print(f"Trip delisted by {agt}: {trip['attributes']}")
-        self.delete(Percept("trip",trip))
+        trip_perc = self.get(Percept("trip",trip))
+        if trip_perc is None:
+            self.print(f"Trip {trip['attributes']} already delisted")
+            return
+        self.delete(trip_perc)
 
 class Seller(Agent):    
     def __init__(self, agt_name=None):
@@ -30,10 +34,10 @@ class Seller(Agent):
         if self.has(Belief("trip",trip)):
             self.print(f"Selling trip: {trip['attributes']} to {src}")
             self.delist_trip(trip)
-            self.send(src,tell,Belief("travel_ticket",trip))
+            self.send(src,Belief("travel_ticket",trip))
         else:
             self.print(f"Trip {trip['attributes']} not found for {src}")
-            self.send(src,achieve,Goal("buyTrip"))
+            self.send(src,Goal("buyTrip"))
     
     @pl(gain,Goal("improve",(Any,Any)))
     def improve_trip(self, src, improve_args):
@@ -47,10 +51,15 @@ class Seller(Agent):
                 new_price = trip['attributes'][1] - randint(50,150)
         
         new_trip = (new_stop,new_price)
-        self.print(f"Creating an improved trip: {trip['attributes']} -> {new_trip} because of {reason} for {src}")
+        self.print(f"Creating an improved trip: {trip['attributes']} -> {new_trip} because of {reason} for {src}") 
         self.announce_trip(new_trip)
         new_trip = {"seller":self.my_name,"attributes":new_trip}
-        self.send(src,achieve,Goal("check",new_trip))
+        self.send(src,Goal("check",new_trip))
+        
+    def on_idle(self):
+        if not Admin().running_class_agents("Buyer"):
+            self.print("No buyers left, stopping")
+            self.stop_cycle()
     
 class Buyer(Agent):
     def __init__(self, agt_name, max_stops, max_price):
@@ -58,7 +67,7 @@ class Buyer(Agent):
         self.add(Belief("preferences",(max_stops,max_price),adds_event=False))
         self.add(Goal("buyTrip"))
     
-    @pl(gain,Goal("buyTrip"),Belief("preferences",(Any,Any)))
+    @pl(gain, Goal("buyTrip"), Belief("preferences",(Any,Any)))
     def search_trip(self, src, prefs):
         self.wait(1)
         trips = self.get(Belief("trip",Any),all=True,ck_src=False)
@@ -82,17 +91,17 @@ class Buyer(Agent):
         
         if best_score > 2:
             self.print(f"Trip from {best_trip.args['seller']} accepted: {best_trip.args['attributes']}")     
-            self.send(best_trip.args['seller'],achieve,Goal("buy",best_trip.args))
+            self.send(best_trip.args['seller'],Goal("buy",best_trip.args))
         else:
             self.print(f"Trip from {best_trip.args['seller']} rejected: {best_trip.args['attributes']}, asking to improve {best_reason}")
-            self.send(best_trip.args['seller'],achieve,Goal("improve",(best_trip.args,best_reason)))
+            self.send(best_trip.args['seller'],Goal("improve",(best_trip.args,best_reason)))
     
     @pl(gain, Goal("check",Any), Belief("preferences",(Any,Any)))
     def check_trip(self, src, trip, prefs):
         score, reason = self.evaluate_trip(trip,prefs)
         if score > 1.8:
             self.print(f"Trip from {trip['seller']} accepted: {trip['attributes']}")
-            self.send(src,achieve,Goal("buy",trip))
+            self.send(src,Goal("buy",trip))
         else:
             self.print(f"Trip from {trip['seller']} rejected: {trip['attributes']} because of {reason}. Giving up")
             self.stop_cycle()
@@ -118,6 +127,7 @@ class Buyer(Agent):
         self.stop_cycle()
       
 if __name__ == "__main__":
+    Channel().show_exec = True
     ws = Website()
     agent_list: list = [Seller() for _ in range(1)]
     
