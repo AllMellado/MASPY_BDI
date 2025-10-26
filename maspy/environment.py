@@ -9,6 +9,9 @@ from inspect import currentframe
 from itertools import product, combinations, permutations
 if TYPE_CHECKING:
     from maspy.agent import Agent
+    
+from traceback import extract_tb
+import sys
 
 DEFAULT_GROUP = "none"
 
@@ -412,8 +415,9 @@ class Environment(metaclass=EnvironmentMultiton):
             else:
                 self._percepts[percept.group][percept.name].remove(percept)
             self.logger.info(f'Deleting {percept}', extra=self.env_info)
-        except KeyError:
-            self.logger.warning(f'{percept} doesnt exist, cannot be deleted',extra=self.env_info)
+        except KeyError as ae:
+            self.print(f'{percept} doesnt exist, and cannot be deleted')
+            #self.logger.warning(f'{percept} doesnt exist, and cannot be deleted',extra=self.env_info)
               
     def _clean(self, percept_data: Iterable[Percept] | Percept) -> Dict[str, Dict[str, set]]:
         match percept_data:

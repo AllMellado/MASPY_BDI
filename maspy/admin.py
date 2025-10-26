@@ -18,7 +18,7 @@ import atexit
 import os
 import sys, queue 
 
-MASPY_VERSION = "2025.06.07"
+MASPY_VERSION = "Dev"
 
 TAgent = TypeVar('TAgent', bound=Agent)
 TEnv = TypeVar('TEnv', bound=Environment)
