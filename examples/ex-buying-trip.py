@@ -34,10 +34,10 @@ class Seller(Agent):
         if self.has(Belief("trip",trip)):
             self.print(f"Selling trip: {trip['attributes']} to {src}")
             self.delist_trip(trip)
-            self.send(src,Belief("travel_ticket",trip))
+            self.send(src,tell, Belief("travel_ticket",trip))
         else:
             self.print(f"Trip {trip['attributes']} not found for {src}")
-            self.send(src,Goal("buyTrip"))
+            self.send(src, achieve, Goal("buyTrip"))
     
     @pl(gain,Goal("improve",(Any,Any)))
     def improve_trip(self, src, improve_args):
@@ -54,7 +54,7 @@ class Seller(Agent):
         self.print(f"Creating an improved trip: {trip['attributes']} -> {new_trip} because of {reason} for {src}") 
         self.announce_trip(new_trip)
         new_trip = {"seller":self.my_name,"attributes":new_trip}
-        self.send(src,Goal("check",new_trip))
+        self.send(src, achieve, Goal("check",new_trip))
         
     def on_idle(self):
         if not Admin().running_class_agents("Buyer"):
@@ -91,17 +91,17 @@ class Buyer(Agent):
         
         if best_score > 2:
             self.print(f"Trip from {best_trip.args['seller']} accepted: {best_trip.args['attributes']}")     
-            self.send(best_trip.args['seller'],Goal("buy",best_trip.args))
+            self.send(best_trip.args['seller'], achieve, Goal("buy",best_trip.args))
         else:
             self.print(f"Trip from {best_trip.args['seller']} rejected: {best_trip.args['attributes']}, asking to improve {best_reason}")
-            self.send(best_trip.args['seller'],Goal("improve",(best_trip.args,best_reason)))
+            self.send(best_trip.args['seller'], achieve,Goal("improve",(best_trip.args,best_reason)))
     
     @pl(gain, Goal("check",Any), Belief("preferences",(Any,Any)))
     def check_trip(self, src, trip, prefs):
         score, reason = self.evaluate_trip(trip,prefs)
         if score > 1.8:
             self.print(f"Trip from {trip['seller']} accepted: {trip['attributes']}")
-            self.send(src,Goal("buy",trip))
+            self.send(src, achieve, Goal("buy",trip))
         else:
             self.print(f"Trip from {trip['seller']} rejected: {trip['attributes']} because of {reason}. Giving up")
             self.stop_cycle()
